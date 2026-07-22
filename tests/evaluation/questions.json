@@ -1,0 +1,23 @@
+[
+  {
+    "id": "q1",
+    "question": "¿Cuándo procede la inadmisión del recurso de revisión en materia tributaria?",
+    "expected_case_number": "319-2011",
+    "expected_legal_area": "Contencioso Tributario",
+    "expected_source_type": "jurisprudence"
+  },
+  {
+    "id": "q2",
+    "question": "¿Qué resuelve la Sala respecto al despido intempestivo en el juicio 960-07?",
+    "expected_case_number": "960-07",
+    "expected_legal_area": "Laboral y Social",
+    "expected_source_type": "jurisprudence"
+  },
+  {
+    "id": "q3",
+    "question": "Impugnación de paternidad y prueba de ADN en juicio de casación 114-2003",
+    "expected_case_number": "114-2003",
+    "expected_legal_area": "Familia, Niñez, Adolescencia y Adolescentes Infractores",
+    "expected_source_type": "document"
+  }
+]

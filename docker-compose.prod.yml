@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: laix_rag_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    restart: always
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: laix_rag_postgres_prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-laix_rag}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./docker/postgres.conf:/etc/postgresql/postgres.conf:ro
+    command: postgres -c config_file=/etc/postgresql/postgres.conf
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 4000M
+
+  redis:
+    image: redis:7-alpine
+    container_name: laix_rag_redis_prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: laix_rag_api_prod
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-hiems/Sentence-BERT-Spanish}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 3000M
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: laix_rag_worker_prod
+    command: celery -A app.core.celery_app worker --loglevel=info -c 4
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-hiems/Sentence-BERT-Spanish}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 3000M
+
+volumes:
+  postgres_data_prod:

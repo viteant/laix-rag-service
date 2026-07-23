@@ -17,7 +17,7 @@ for i in range(max_retries):
         break
     except Exception as e:
         if i < max_retries - 1:
-            print(f"⏳ Esperando a que PostgreSQL esté listo... (Intento {i+1}/{max_retries})")
+            print(f"⏳ Esperando a que PostgreSQL esté listo... (Intento {i+1}/{max_retries}). Error: {e}")
             time.sleep(2)
         else:
             print(f"❌ Error conectando a PostgreSQL tras {max_retries} intentos: {e}")

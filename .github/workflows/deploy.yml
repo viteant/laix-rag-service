@@ -81,7 +81,7 @@ jobs:
             # 4. Comprobar salud del servicio con bucle de tolerancia (hasta 15 segundos)
             echo "⏳ Verificando salud del servicio..."
             HEALTH_STATUS=""
-            for i in {1..8}; do
+            for i in {1..20}; do
               sleep 2
               HEALTH_STATUS=$(curl -s http://localhost/health | grep -o '"status":"healthy"' || true)
               if [ "$HEALTH_STATUS" = '"status":"healthy"' ]; then

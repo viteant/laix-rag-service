@@ -78,6 +78,10 @@ jobs:
             echo "🐳 Levantando contenedores..."
             $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d
 
+            # Forzar reinicio de Nginx para evitar que cachee la IP antigua del contenedor de la API
+            echo "🔄 Reiniciando proxy Nginx..."
+            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml restart nginx
+
             # 4. Comprobar salud del servicio con bucle de tolerancia (hasta 15 segundos)
             echo "⏳ Verificando salud del servicio..."
             HEALTH_STATUS=""

@@ -68,3 +68,6 @@ Thumbs.db
 logs/
 celerybeat-schedule
 celerybeat.pid
+
+# Context
+.context/

@@ -68,6 +68,7 @@ def inventory_directory(base_dir: str):
     source_folders = {
         os.path.join(base_dir, "documentos"): SourceType.DOCUMENT.value,
         os.path.join(base_dir, "jurisprudencia"): SourceType.JURISPRUDENCE.value,
+        os.path.join(base_dir, "jurisprudencias"): SourceType.JURISPRUDENCE.value,
     }
 
     for folder_path, source_type in source_folders.items():

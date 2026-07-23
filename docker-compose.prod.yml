@@ -92,6 +92,34 @@ services:
         limits:
           memory: 3000M
 
+  watcher:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    command: python scripts/daemon_watcher.py
+    container_name: laix_rag_watcher_prod
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
+      - HF_HOME=/root/.cache/huggingface
+    volumes:
+      - ./app:/app/app
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - hf_cache_prod:/root/.cache/huggingface
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1500M
+
 volumes:
   postgres_data_prod:
   hf_cache_prod:

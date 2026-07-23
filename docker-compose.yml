@@ -75,5 +75,28 @@ services:
       redis:
         condition: service_healthy
 
+  watcher:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: laix_rag_watcher
+    command: python scripts/daemon_watcher.py
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-laix_rag}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - ENVIRONMENT=development
+    volumes:
+      - ./app:/app/app
+      - ./data:/app/data
+      - ./scripts:/app/scripts
+      - ./tests:/app/tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:

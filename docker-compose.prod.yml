@@ -49,10 +49,12 @@ services:
       - REDIS_PORT=6379
       - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-hiems/Sentence-BERT-Spanish}
+      - HF_HOME=/root/.cache/huggingface
     volumes:
       - ./app:/app/app
       - ./scripts:/app/scripts
       - ./data:/app/data
+      - hf_cache_prod:/root/.cache/huggingface
     depends_on:
       - postgres
       - redis
@@ -75,10 +77,12 @@ services:
       - REDIS_PORT=6379
       - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-hiems/Sentence-BERT-Spanish}
+      - HF_HOME=/root/.cache/huggingface
     volumes:
       - ./app:/app/app
       - ./scripts:/app/scripts
       - ./data:/app/data
+      - hf_cache_prod:/root/.cache/huggingface
     depends_on:
       - postgres
       - redis
@@ -90,3 +94,4 @@ services:
 
 volumes:
   postgres_data_prod:
+  hf_cache_prod:

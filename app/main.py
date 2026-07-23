@@ -54,3 +54,9 @@ def health_check(db: Session = Depends(get_db)):
         "database": db_status,
         "pgvector_extension": vector_enabled
     }
+from app.main import app
+from fastapi.responses import RedirectResponse
+
+@app.get("/")
+def root():
+    return RedirectResponse(url="/docs")

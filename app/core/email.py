@@ -15,7 +15,7 @@ def send_alert_email(subject: str, message: str, is_html: bool = True) -> bool:
         return False
 
     msg = MIMEMultipart()
-    msg['From'] = settings.SMTP_USER
+    msg['From'] = settings.SMTP_FROM_EMAIL if settings.SMTP_FROM_EMAIL else settings.SMTP_USER
     msg['To'] = settings.ALERT_EMAIL_TO
     msg['Subject'] = f"[LAIX RAG] {subject}"
 

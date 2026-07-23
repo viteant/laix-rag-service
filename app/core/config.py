@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
     ALERT_EMAIL_TO: str = ""
 
     model_config = SettingsConfigDict(

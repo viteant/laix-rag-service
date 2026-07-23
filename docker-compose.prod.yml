@@ -48,7 +48,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-hiems/Sentence-BERT-Spanish}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
       - HF_HOME=/root/.cache/huggingface
     volumes:
       - ./app:/app/app
@@ -76,7 +76,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-hiems/Sentence-BERT-Spanish}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
       - HF_HOME=/root/.cache/huggingface
     volumes:
       - ./app:/app/app

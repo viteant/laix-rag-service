@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     SERVICE_API_TOKEN: str = "dev_secret_token_laix_rag_2026"
 
-    EMBEDDING_MODEL: str = "hiems/Sentence-BERT-Spanish"
+    EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     EMBEDDING_DIMENSIONS: int = 768
 
     model_config = SettingsConfigDict(

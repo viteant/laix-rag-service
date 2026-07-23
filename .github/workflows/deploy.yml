@@ -50,7 +50,7 @@ jobs:
           EOFENV
           ) bash -s" << 'EOF'
             set -e
-            echo "🚀 Ejecutando Despliegue Ultrarrápido en VPS..."
+            echo "🚀 Ejecutando Despliegue en VPS..."
 
             cd /opt/laix-rag
 
@@ -71,14 +71,13 @@ jobs:
               DOCKER_COMPOSE_CMD="docker compose"
             fi
 
-            # 3. Levantar contenedores y reiniciar API/Worker
-            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d
-            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml restart api worker
+            # 3. Compilar imágenes actualizadas e inicie contenedores
+            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d --build
 
-            # 4. Comprobar salud del servicio con bucle de tolerancia (hasta 12 segundos)
+            # 4. Comprobar salud del servicio con bucle de tolerancia (hasta 15 segundos)
             echo "⏳ Verificando salud del servicio..."
             HEALTH_STATUS=""
-            for i in {1..6}; do
+            for i in {1..8}; do
               sleep 2
               HEALTH_STATUS=$(curl -s http://localhost/health | grep -o '"status":"healthy"' || true)
               if [ "$HEALTH_STATUS" = '"status":"healthy"' ]; then
@@ -87,10 +86,11 @@ jobs:
             done
 
             if [ "$HEALTH_STATUS" = '"status":"healthy"' ]; then
-              echo "✅ Despliegue ultrarrápido exitoso. El servicio RAG responde 'healthy'."
+              echo "✅ Despliegue exitoso. El servicio RAG responde 'healthy'."
             else
               echo "❌ Advertencia: La verificación de salud devolvió un estado no esperado."
-              echo "Diagnóstico de respuesta en http://localhost/health:"
-              curl -i http://localhost/health || true
+              echo "📋 Logs del contenedor API:"
+              $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml logs --tail 30 api || true
+              exit 1
             fi
           EOF

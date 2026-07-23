@@ -32,13 +32,12 @@ jobs:
           # 1. Crear directorio remoto si no existe
           ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} "sudo mkdir -p /opt/laix-rag && sudo chown -R \$USER:\$USER /opt/laix-rag"
 
-          # 2. Transferir archivos del repositorio directamente al VPS vía Rsync
+          # 2. Transferir archivos del repositorio ignorando data/ para no alterar los 25GB de PDFs en el VPS
           rsync -avz -e "ssh -p ${{ secrets.VPS_PORT }}" \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.venv' \
-            --exclude='data/source/*' \
-            --exclude='data/processed/*' \
+            --exclude='data' \
             --exclude='postgres_data*' \
             ./ ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }}:/opt/laix-rag/
 

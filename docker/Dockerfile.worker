@@ -16,9 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY pyproject.toml .
+# Instalar PyTorch en versión CPU súper ligera (~50MB vs 2.5GB de CUDA)
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir .
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+COPY pyproject.toml .
+RUN pip install --no-cache-dir .
 
 COPY app/ /app/app/
 COPY scripts/ /app/scripts/

@@ -45,7 +45,7 @@ jobs:
         env:
           ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
         run: |
-          ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} "ENV_CONTENT=\$(cat << 'EOFENV'
+          ssh -t -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} "ENV_CONTENT=\$(cat << 'EOFENV'
           ${ENV_FILE_CONTENT}
           EOFENV
           ) bash -s" << 'EOF'
@@ -71,8 +71,8 @@ jobs:
               DOCKER_COMPOSE_CMD="docker compose"
             fi
 
-            # 3. Compilar imágenes actualizadas e inicie contenedores
-            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d --build
+            # 3. Compilar e iniciar contenedores mostrando salida en tiempo real
+            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d --build --progress=plain
 
             # 4. Comprobar salud del servicio con bucle de tolerancia (hasta 15 segundos)
             echo "⏳ Verificando salud del servicio..."

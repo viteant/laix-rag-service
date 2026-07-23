@@ -28,7 +28,11 @@ def evaluate_pdf_quality(filepath: str) -> tuple[int, bool, bool]:
     Retorna (page_count, has_embedded_text, requires_ocr)
     Regla: Si menos del 60% de las páginas tiene al menos 100 caracteres legibles, requiere OCR.
     """
-    doc = fitz.open(filepath)
+    try:
+        doc = fitz.open(filepath)
+    except Exception as e:
+        print(f"  [Advertencia] No se pudo abrir {os.path.basename(filepath)} para evaluación de calidad (Archivo corrupto o inválido).")
+        return 0, False, True
     page_count = len(doc)
     if page_count == 0:
         doc.close()

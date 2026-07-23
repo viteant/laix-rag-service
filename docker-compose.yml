@@ -34,6 +34,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.api
     container_name: laix_rag_api
+    env_file: .env
     restart: always
     ports:
       - "8000:8000"
@@ -58,6 +59,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.worker
     container_name: laix_rag_worker
+    env_file: .env
     restart: always
     environment:
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-laix_rag}
@@ -80,6 +82,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.worker
     container_name: laix_rag_watcher
+    env_file: .env
     command: python scripts/daemon_watcher.py
     restart: always
     environment:

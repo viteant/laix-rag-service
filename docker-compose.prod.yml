@@ -42,6 +42,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.api
     container_name: laix_rag_api_prod
+    env_file: .env
     environment:
       - ENVIRONMENT=production
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
@@ -70,6 +71,7 @@ services:
       dockerfile: docker/Dockerfile.worker
     command: celery -A app.core.celery_app.celery_app worker --loglevel=info -c 4
     container_name: laix_rag_worker_prod
+    env_file: .env
     environment:
       - ENVIRONMENT=production
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
@@ -98,6 +100,7 @@ services:
       dockerfile: docker/Dockerfile.worker
     command: python scripts/daemon_watcher.py
     container_name: laix_rag_watcher_prod
+    env_file: .env
     environment:
       - ENVIRONMENT=production
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}

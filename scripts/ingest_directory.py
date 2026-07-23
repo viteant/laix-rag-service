@@ -52,9 +52,8 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
         existing_doc = SourceDocument(
             filename=filename,
             source_type=source_type,
-            filepath=str(filepath),
             original_path=str(filepath),
-            file_size_bytes=filepath.stat().st_size,
+            file_size=filepath.stat().st_size,
             sha256=sha256_hash,
             page_count=page_count,
             status="processing"
@@ -64,7 +63,6 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
         db.refresh(existing_doc)
     else:
         existing_doc.status = "processing"
-        existing_doc.filepath = str(filepath)
         existing_doc.original_path = str(filepath)
         db.commit()
 
@@ -84,7 +82,6 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
         for p in pages:
             if p.raw_text:
                 p.clean_text = TextCleaner.clean_text(p.raw_text)
-                p.char_count = len(p.clean_text)
         db.commit()
 
         # 2. Construcción de texto completo

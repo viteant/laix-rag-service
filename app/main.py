@@ -12,6 +12,9 @@ from app.api.admin_router import router as admin_router
 max_retries = 10
 for i in range(max_retries):
     try:
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            conn.commit()
         Base.metadata.create_all(bind=engine)
         print("✅ Tablas de la base de datos verificadas/creadas con éxito.")
         break

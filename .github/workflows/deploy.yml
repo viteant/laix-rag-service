@@ -34,4 +34,4 @@ jobs:
           ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} "ENV_CONTENT=\$(cat << 'EOFENV'
           ${ENV_FILE_CONTENT}
           EOFENV
-          ) bash -s" < scripts/deploy_vps.sh "${{ github.repository }}"
+          ) bash -s" < scripts/deploy_vps.sh "${{ github.repository }}" "${{ secrets.GITHUB_TOKEN }}"

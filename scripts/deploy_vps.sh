@@ -2,7 +2,7 @@
 set -e
 
 REPO_NAME="${1:-viteant/laix-rag-service}"
-ENV_CONTENT="${ENV_CONTENT:-$2}"
+GH_TOKEN="$2"
 
 echo "🚀 Iniciando Despliegue Automático en VPS (Usuario: $USER)..."
 
@@ -18,14 +18,26 @@ $SUDO mkdir -p /opt/laix-rag
 $SUDO chown -R "$USER:$USER" /opt/laix-rag
 cd /opt/laix-rag
 
-# 2. Clonar si no existe .git o hacer pull si existe
+# 2. Configurar autenticación para repositorios privados con GITHUB_TOKEN
+if [ -n "$GH_TOKEN" ]; then
+  AUTH_URL="https://x-access-token:${GH_TOKEN}@github.com/${REPO_NAME}.git"
+else
+  AUTH_URL="https://github.com/${REPO_NAME}.git"
+fi
+
+# Clonar si no existe .git o hacer pull si existe
 if [ ! -d ".git" ]; then
-  echo "📥 Clonando repositorio $REPO_NAME por primera vez..."
-  git clone "https://github.com/${REPO_NAME}.git" .
+  echo "📥 Clonando repositorio privado $REPO_NAME por primera vez..."
+  git clone "$AUTH_URL" .
+else
+  git remote set-url origin "$AUTH_URL"
 fi
 
 git fetch --all
 git reset --hard origin/main
+
+# Omitir el token de las URLs remotas en disco por seguridad
+git remote set-url origin "https://github.com/${REPO_NAME}.git"
 
 # 3. Escribir archivo .env desde secret de GitHub
 if [ -n "$ENV_CONTENT" ]; then

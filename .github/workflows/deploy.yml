@@ -71,18 +71,26 @@ jobs:
               DOCKER_COMPOSE_CMD="docker compose"
             fi
 
-            # 3. Levantar contenedores y reiniciar API/Worker de forma ultrarrápida (sin re-compilar pip a menos que cambie pyproject.toml)
+            # 3. Levantar contenedores y reiniciar API/Worker
             $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d
             $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml restart api worker
 
-            # 4. Comprobar salud del servicio
+            # 4. Comprobar salud del servicio con bucle de tolerancia (hasta 12 segundos)
             echo "⏳ Verificando salud del servicio..."
-            sleep 3
-            HEALTH_STATUS=$(curl -s http://localhost/health | grep -o '"status":"healthy"' || true)
+            HEALTH_STATUS=""
+            for i in {1..6}; do
+              sleep 2
+              HEALTH_STATUS=$(curl -s http://localhost/health | grep -o '"status":"healthy"' || true)
+              if [ "$HEALTH_STATUS" = '"status":"healthy"' ]; then
+                break
+              fi
+            done
 
             if [ "$HEALTH_STATUS" = '"status":"healthy"' ]; then
               echo "✅ Despliegue ultrarrápido exitoso. El servicio RAG responde 'healthy'."
             else
               echo "❌ Advertencia: La verificación de salud devolvió un estado no esperado."
+              echo "Diagnóstico de respuesta en http://localhost/health:"
+              curl -i http://localhost/health || true
             fi
           EOF

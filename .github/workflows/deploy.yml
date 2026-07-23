@@ -32,7 +32,7 @@ jobs:
           # 1. Crear directorio remoto si no existe
           ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} "sudo mkdir -p /opt/laix-rag && sudo chown -R \$USER:\$USER /opt/laix-rag"
 
-          # 2. Transferir archivos del repositorio ignorando data/ para no alterar los 25GB de PDFs en el VPS
+          # 2. Transferir archivos del repositorio directamente al VPS vía Rsync (Ignorando data/)
           rsync -avz -e "ssh -p ${{ secrets.VPS_PORT }}" \
             --exclude='.git' \
             --exclude='.github' \
@@ -50,17 +50,16 @@ jobs:
           EOFENV
           ) bash -s" << 'EOF'
             set -e
-            echo "🚀 Ejecutando Despliegue en VPS..."
+            echo "🚀 Ejecutando Despliegue Ultrarrápido en VPS..."
 
             cd /opt/laix-rag
 
             # 1. Escribir archivo .env de producción
             if [ -n "$ENV_CONTENT" ]; then
               echo "$ENV_CONTENT" > .env
-              echo "⚙️ Archivo .env de producción actualizado."
             fi
 
-            # 2. Levantar contenedores con docker compose
+            # 2. Determinar comando docker compose y permisos
             SUDO=""
             if [ "$(id -u)" -ne 0 ]; then
               SUDO="sudo"
@@ -72,16 +71,17 @@ jobs:
               DOCKER_COMPOSE_CMD="docker compose"
             fi
 
-            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d --build
-            $SUDO docker image prune -f || true
+            # 3. Levantar contenedores y reiniciar API/Worker de forma ultrarrápida (sin re-compilar pip a menos que cambie pyproject.toml)
+            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d
+            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml restart api worker
 
-            # 3. Comprobar salud del servicio
+            # 4. Comprobar salud del servicio
             echo "⏳ Verificando salud del servicio..."
-            sleep 5
+            sleep 3
             HEALTH_STATUS=$(curl -s http://localhost/health | grep -o '"status":"healthy"' || true)
 
             if [ "$HEALTH_STATUS" = '"status":"healthy"' ]; then
-              echo "✅ Despliegue exitoso. El servicio RAG responde 'healthy'."
+              echo "✅ Despliegue ultrarrápido exitoso. El servicio RAG responde 'healthy'."
             else
               echo "❌ Advertencia: La verificación de salud devolvió un estado no esperado."
             fi

@@ -52,6 +52,8 @@ services:
       - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-hiems/Sentence-BERT-Spanish}
     volumes:
+      - ./app:/app/app
+      - ./scripts:/app/scripts
       - ./data:/app/data
     depends_on:
       - postgres
@@ -67,7 +69,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.worker
     container_name: laix_rag_worker_prod
-    command: celery -A app.core.celery_app worker --loglevel=info -c 4
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -c 4
     environment:
       - ENVIRONMENT=production
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
@@ -76,6 +78,8 @@ services:
       - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-hiems/Sentence-BERT-Spanish}
     volumes:
+      - ./app:/app/app
+      - ./scripts:/app/scripts
       - ./data:/app/data
     depends_on:
       - postgres

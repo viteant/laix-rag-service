@@ -1,3 +1,4 @@
+import time
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -7,7 +8,19 @@ from app.core.database import get_db, Base, engine
 from app.api.jurisprudence_router import router as jurisprudence_router
 from app.api.admin_router import router as admin_router
 
-Base.metadata.create_all(bind=engine)
+# Intentar conectar a PostgreSQL con reintentos durante el arranque inicial
+max_retries = 10
+for i in range(max_retries):
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("✅ Tablas de la base de datos verificadas/creadas con éxito.")
+        break
+    except Exception as e:
+        if i < max_retries - 1:
+            print(f"⏳ Esperando a que PostgreSQL esté listo... (Intento {i+1}/{max_retries})")
+            time.sleep(2)
+        else:
+            print(f"❌ Error conectando a PostgreSQL tras {max_retries} intentos: {e}")
 
 app = FastAPI(
     title=settings.APP_NAME,

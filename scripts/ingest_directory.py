@@ -21,8 +21,6 @@ from app.processing.section_detector import SectionDetector
 from app.processing.chunker import TextChunker
 from app.retrieval.embedding_service import EmbeddingService
 
-Base.metadata.create_all(bind=engine)
-
 
 def calculate_sha256(filepath: pathlib.Path) -> str:
     hasher = hashlib.sha256()
@@ -149,6 +147,7 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
 
 
 def ingest_directory(source_dir: str, limit: Optional[int] = None, force: bool = False, retry_failed: bool = False):
+    Base.metadata.create_all(bind=engine)
     db: Session = SessionLocal()
     dir_path = pathlib.Path(source_dir)
 

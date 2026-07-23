@@ -15,14 +15,21 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Deploy via SSH to VPS
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Setup SSH Agent & Key
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          script: |
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Add VPS to Known Hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p ${{ secrets.VPS_PORT }} -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Execute Deployment Commands on VPS
+        run: |
+          ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} << 'EOF'
             set -e
             echo "🚀 Iniciando Despliegue Automático en VPS..."
 
@@ -30,7 +37,7 @@ jobs:
             mkdir -p /opt/laix-rag
             cd /opt/laix-rag
 
-            # 2. Si no es un repo git local, clonar primer commit; si ya existe, hacer pull
+            # 2. Clunar repo si no existe .git, o hacer pull si ya existe
             if [ ! -d ".git" ]; then
               git clone https://github.com/${{ github.repository }}.git .
             fi
@@ -39,16 +46,18 @@ jobs:
             git reset --hard origin/main
 
             # 3. Escribir archivo .env desde secret de GitHub
-            echo "${{ secrets.ENV_FILE_CONTENT }}" > .env
+            cat << 'ENVEOF' > .env
+${{ secrets.ENV_FILE_CONTENT }}
+ENVEOF
 
             # 4. Compilar y levantar contenedores en producción
             docker compose -f docker-compose.prod.yml up -d --build
 
-            # 5. Limpiar imágenes huérfanas/antiguas
+            # 5. Limpiar imágenes antiguas
             docker image prune -f
 
             # 6. Comprobar salud del servicio
-            echo "⏳ Esperando 5 segundos para verificación de salud..."
+            echo "⏳ Verificando salud del servicio..."
             sleep 5
             HEALTH_STATUS=$(curl -s http://localhost/health | grep -o '"status":"healthy"' || true)
 
@@ -57,3 +66,4 @@ jobs:
             else
               echo "❌ Advertencia: La verificación de salud devolvió un estado no esperado."
             fi
+          EOF

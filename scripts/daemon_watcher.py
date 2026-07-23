@@ -9,6 +9,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from scripts.inventory_documents import inventory_directory
 from scripts.ingest_directory import ingest_directory
+from app.core.email import send_alert_email
 
 
 def run_daemon(interval_seconds: int = 300):
@@ -35,6 +36,18 @@ def run_daemon(interval_seconds: int = 300):
         except Exception as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ❌ Error crítico en el ciclo del daemon:")
             traceback.print_exc()
+            
+            error_details = traceback.format_exc()
+            subject = "Alerta Crítica: Fallo en Daemon de Ingesta"
+            body = (
+                f"<h2>Fallo en el Daemon</h2>"
+                f"<p>Se ha producido un error inesperado que interrumpió el ciclo de escaneo.</p>"
+                f"<h3>Detalles del Error:</h3>"
+                f"<pre>{error_details}</pre>"
+                f"<p>El daemon intentará recuperarse en el próximo ciclo.</p>"
+            )
+            send_alert_email(subject, body)
+            
             print(f"⚠️ El daemon continuará en el próximo ciclo a pesar del error.\n")
         
         # Esperar hasta el próximo ciclo

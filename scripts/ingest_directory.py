@@ -20,6 +20,7 @@ from app.processing.metadata_extractor import MetadataExtractor
 from app.processing.section_detector import SectionDetector
 from app.processing.chunker import TextChunker
 from app.retrieval.embedding_service import EmbeddingService
+from app.core.email import send_alert_email
 
 
 def calculate_sha256(filepath: pathlib.Path) -> str:
@@ -170,6 +171,21 @@ def ingest_directory(source_dir: str, limit: Optional[int] = None, force: bool =
             success_count += 1
         else:
             skipped_count += 1
+        
+        total_processed = success_count + skipped_count + failed_count
+        if total_processed > 0 and total_processed % 1000 == 0:
+            subject = f"Progreso de Ingesta: {total_processed} documentos procesados"
+            body = (
+                f"<h2>Reporte Parcial de Ingesta</h2>"
+                f"<p>El daemon de inyección ha procesado <b>{total_processed}</b> documentos hasta ahora.</p>"
+                f"<ul>"
+                f"<li><b>Exitosos:</b> {success_count}</li>"
+                f"<li><b>Omitidos/Ya procesados:</b> {skipped_count}</li>"
+                f"<li><b>Fallidos:</b> {failed_count}</li>"
+                f"</ul>"
+                f"<p>Total pendientes en este lote: {len(pdf_files) - total_processed}</p>"
+            )
+            send_alert_email(subject, body)
 
     db.close()
 

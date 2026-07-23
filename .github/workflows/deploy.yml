@@ -27,11 +27,63 @@ jobs:
           ssh-keyscan -p ${{ secrets.VPS_PORT }} -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Execute Deployment Commands on VPS
+      - name: Sync Code Files to VPS via Rsync
+        run: |
+          # 1. Crear directorio remoto si no existe
+          ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} "sudo mkdir -p /opt/laix-rag && sudo chown -R \$USER:\$USER /opt/laix-rag"
+
+          # 2. Transferir archivos del repositorio directamente al VPS vía Rsync
+          rsync -avz -e "ssh -p ${{ secrets.VPS_PORT }}" \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.venv' \
+            --exclude='data/source/*' \
+            --exclude='data/processed/*' \
+            --exclude='postgres_data*' \
+            ./ ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }}:/opt/laix-rag/
+
+      - name: Restart & Verify Production Services on VPS
         env:
           ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
         run: |
           ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} "ENV_CONTENT=\$(cat << 'EOFENV'
           ${ENV_FILE_CONTENT}
           EOFENV
-          ) bash -s" < scripts/deploy_vps.sh "${{ github.repository }}" "${{ secrets.GITHUB_TOKEN }}"
+          ) bash -s" << 'EOF'
+            set -e
+            echo "🚀 Ejecutando Despliegue en VPS..."
+
+            cd /opt/laix-rag
+
+            # 1. Escribir archivo .env de producción
+            if [ -n "$ENV_CONTENT" ]; then
+              echo "$ENV_CONTENT" > .env
+              echo "⚙️ Archivo .env de producción actualizado."
+            fi
+
+            # 2. Levantar contenedores con docker compose
+            SUDO=""
+            if [ "$(id -u)" -ne 0 ]; then
+              SUDO="sudo"
+            fi
+
+            if command -v docker-compose &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker-compose"
+            else
+              DOCKER_COMPOSE_CMD="docker compose"
+            fi
+
+            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d --build
+            $SUDO docker image prune -f || true
+
+            # 3. Comprobar salud del servicio
+            echo "⏳ Verificando salud del servicio..."
+            sleep 5
+            HEALTH_STATUS=$(curl -s http://localhost/health | grep -o '"status":"healthy"' || true)
+
+            if [ "$HEALTH_STATUS" = '"status":"healthy"' ]; then
+              echo "✅ Despliegue exitoso. El servicio RAG responde 'healthy'."
+            else
+              echo "❌ Advertencia: La verificación de salud devolvió un estado no esperado."
+            fi
+          EOF

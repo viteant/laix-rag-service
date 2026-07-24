@@ -31,7 +31,7 @@ def calculate_sha256(filepath: pathlib.Path) -> str:
     return hasher.hexdigest()
 
 
-def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False) -> bool:
+def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False) -> str:
     print(f"\n==================================================")
     print(f"📄 Procesando PDF: {filepath.name}")
 
@@ -43,7 +43,7 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
     existing_doc = db.query(SourceDocument).filter_by(sha256=sha256_hash).first()
     if existing_doc and existing_doc.status == "completed" and not force:
         print(f"ℹ️ Documento ya procesado anteriormente (SHA256: {sha256_hash[:10]}...). Omitiendo.")
-        return False
+        return "skipped"
 
     if not existing_doc:
         doc = fitz.open(filepath)
@@ -133,7 +133,7 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
         db.commit()
 
         print(f"✅ Ingesta completa de {filename} realizada con éxito.")
-        return True
+        return "success"
 
     except Exception as e:
         db.rollback()
@@ -141,7 +141,7 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
         existing_doc.error_message = str(e)
         db.commit()
         print(f"❌ Error al ingerir {filename}: {e}")
-        return False
+        return "failed"
 
 
 def ingest_directory(source_dir: str, limit: Optional[int] = None, force: bool = False, retry_failed: bool = False):
@@ -168,25 +168,28 @@ def ingest_directory(source_dir: str, limit: Optional[int] = None, force: bool =
 
     for pdf in pdf_files:
         res = process_single_pdf(db, pdf, force=force)
-        if res:
+        if res == "success":
             success_count += 1
-        else:
+            
+            # Notificamos cuando hemos logrado 1000 éxitos nuevos
+            if success_count % 1000 == 0:
+                total_processed = success_count + skipped_count + failed_count
+                subject = f"Progreso de Ingesta: {success_count} nuevos documentos procesados"
+                body = (
+                    f"<h2>Reporte Parcial de Ingesta</h2>"
+                    f"<p>El daemon de inyección ha procesado exitosamente <b>{success_count}</b> documentos nuevos en este lote.</p>"
+                    f"<ul>"
+                    f"<li><b>Nuevos Exitosos:</b> {success_count}</li>"
+                    f"<li><b>Omitidos/Ya procesados:</b> {skipped_count}</li>"
+                    f"<li><b>Fallidos:</b> {failed_count}</li>"
+                    f"</ul>"
+                    f"<p>Total pendientes en este lote: {len(pdf_files) - total_processed}</p>"
+                )
+                send_alert_email(subject, body)
+        elif res == "skipped":
             skipped_count += 1
-        
-        total_processed = success_count + skipped_count + failed_count
-        if total_processed > 0 and total_processed % 1000 == 0:
-            subject = f"Progreso de Ingesta: {total_processed} documentos procesados"
-            body = (
-                f"<h2>Reporte Parcial de Ingesta</h2>"
-                f"<p>El daemon de inyección ha procesado <b>{total_processed}</b> documentos hasta ahora.</p>"
-                f"<ul>"
-                f"<li><b>Exitosos:</b> {success_count}</li>"
-                f"<li><b>Omitidos/Ya procesados:</b> {skipped_count}</li>"
-                f"<li><b>Fallidos:</b> {failed_count}</li>"
-                f"</ul>"
-                f"<p>Total pendientes en este lote: {len(pdf_files) - total_processed}</p>"
-            )
-            send_alert_email(subject, body)
+        elif res == "failed":
+            failed_count += 1
 
     db.close()
 

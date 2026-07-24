@@ -154,7 +154,8 @@ def ingest_directory(source_dir: str, limit: Optional[int] = None, force: bool =
         db.close()
         return
 
-    pdf_files = list(dir_path.rglob("*.pdf")) + list(dir_path.rglob("*.PDF"))
+    all_pdf_paths = list(dir_path.rglob("*.pdf")) + list(dir_path.rglob("*.PDF"))
+    pdf_files = [f for f in all_pdf_paths if f.is_file()]
     print(f"🚀 Iniciando Pipeline de Ingesta sobre {len(pdf_files)} PDFs en {source_dir}...")
 
     if limit:

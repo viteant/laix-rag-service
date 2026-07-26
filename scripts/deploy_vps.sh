@@ -47,6 +47,25 @@ else
   echo "⚠️ Advertencia: ENV_CONTENT no fue provisto. Manteniendo .env existente."
 fi
 
+# 4. Configurar el Entorno Virtual del Host y Cronjob (para Scraper)
+echo "🐍 Configurando dependencias del Host para Playwright y el Scraper..."
+# Asegurar que el sistema pueda crear venvs
+$SUDO apt-get update -y || true
+$SUDO apt-get install -y python3-venv || true
+
+if [ ! -d ".venv" ]; then
+  python3 -m venv .venv
+fi
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -e .
+# Instalar los navegadores de playwright y sus dependencias de sistema operativo
+playwright install chromium --with-deps
+
+echo "⏰ Activando cronjob..."
+chmod +x scripts/setup_cron.sh
+./scripts/setup_cron.sh
+
 # 4. Compilar y levantar contenedores en producción
 echo "🐳 Ejecutando Docker Compose..."
 if command -v docker-compose &> /dev/null; then

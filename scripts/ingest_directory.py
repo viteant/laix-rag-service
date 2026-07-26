@@ -65,6 +65,7 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
     else:
         existing_doc.status = "processing"
         existing_doc.original_path = str(filepath)
+        existing_doc.filename = filename
         db.commit()
 
     try:

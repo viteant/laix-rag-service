@@ -67,20 +67,40 @@ class JurisprudenceAnswerGenerator:
             )
             context_blocks.append(block)
 
-        # 3. Ensamblar Respuesta RAG fundamentada
-        # Construir síntesis juridica verificable
-        top_chunk = chunks[0]
-        top_kind = "Precedente Jurisprudencial Vinculante" if top_chunk["source_type"] == "jurisprudence" else "Fallo / Sentencia Particular"
-        top_case = top_chunk["case_number"] or "S/N"
-
-        synthesized_text = (
-            f"Con base en la normativa y los criterios de la Corte Nacional de Justicia de Ecuador:\n\n"
-            f"1. **Criterio Jurídico Aplicable**: De acuerdo con el {top_kind} en el **Juicio No. {top_case}** "
-            f"(Materia: {top_chunk['legal_area']}), se establece que:\n"
-            f"> \"{top_chunk['content'][:350].strip()}...\"\n\n"
-            f"2. **Naturaleza de la Fuente**: Se fundamenta principalmente en un **{top_kind}** "
-            f"obtenido de {top_chunk['filename']} (Páginas {top_chunk['page_start']}-{top_chunk['page_end']}).\n"
-        )
+        synthesized_text = ""
+        
+        # Separar por tipo para dar respuestas específicas
+        if top_chunk.get("source_type") == "registro_oficial" or top_chunk.get("norm_type"):
+            norm_type = top_chunk.get("norm_type") or "Normativa"
+            pub_date = top_chunk.get("publication_date") or "Fecha Desconocida"
+            
+            # Analizar evolución si hay más de 1 chunk
+            evolucion = ""
+            if len(chunks) > 1:
+                fechas = [c.get("publication_date") for c in chunks if c.get("publication_date")]
+                if len(set(fechas)) > 1:
+                    evolucion = "\n\n**Evolución Cronológica Detectada**: Se han encontrado referencias a esta normativa en distintas fechas. " \
+                                "La respuesta prioriza la norma más reciente para asegurar la vigencia, pero debes corroborar derogatorias."
+            
+            synthesized_text = (
+                f"Con base en el Registro Oficial del Ecuador:\n\n"
+                f"1. **Disposición Legal Vigente**: De acuerdo con el/la **{norm_type}** "
+                f"publicado el **{pub_date}**:\n"
+                f"> \"{top_chunk['content'][:400].strip()}...\"\n{evolucion}\n"
+                f"2. **Fuente**: Extraído de {top_chunk['filename']} (Páginas {top_chunk['page_start']}-{top_chunk['page_end']}).\n"
+            )
+        else:
+            top_kind = "Precedente Jurisprudencial Vinculante" if top_chunk.get("source_type") == "jurisprudence" else "Fallo / Sentencia Particular"
+            top_case = top_chunk.get("case_number") or "S/N"
+            
+            synthesized_text = (
+                f"Con base en la normativa y los criterios de la Corte Nacional de Justicia de Ecuador:\n\n"
+                f"1. **Criterio Jurídico Aplicable**: De acuerdo con el {top_kind} en el **Juicio No. {top_case}** "
+                f"(Materia: {top_chunk.get('legal_area', 'Otros')}), se establece que:\n"
+                f"> \"{top_chunk['content'][:350].strip()}...\"\n\n"
+                f"2. **Naturaleza de la Fuente**: Se fundamenta principalmente en un **{top_kind}** "
+                f"obtenido de {top_chunk['filename']} (Páginas {top_chunk['page_start']}-{top_chunk['page_end']}).\n"
+            )
 
         return {
             "query": query,

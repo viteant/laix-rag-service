@@ -61,6 +61,16 @@ class TextChunker:
         return chunks_created
 
     def _save_chunk(self, db: Session, legal_case: LegalCase, section: LegalSection, text: str) -> LegalChunk:
+        # Extraer metadatos para inyección temporal
+        case_meta = legal_case.case_metadata or {}
+        pub_date = case_meta.get("publication_date")
+        n_type = case_meta.get("norm_type")
+        
+        # Crear encabezado temporal si es Registro Oficial
+        if pub_date or n_type:
+            temporal_header = f"[Contexto Legal -> Publicado el: {pub_date or 'Desconocida'} | Tipo: {n_type or 'Norma'}]\n"
+            text = temporal_header + text
+
         content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
         token_count = self.count_tokens(text)
 
@@ -73,6 +83,8 @@ class TextChunker:
             "section_type": section.section_type,
             "page_start": section.page_start,
             "page_end": section.page_end,
+            "publication_date": pub_date,
+            "norm_type": n_type,
         }
 
         chunk = LegalChunk(

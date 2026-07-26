@@ -27,13 +27,33 @@ SECTIONS = {
     "indice_mensual": "https://www.registroficial.gob.ec/265554-2/"
 }
 
+import unicodedata
+
 BASE_DOWNLOAD_DIR = Path("data/source")
 
-def clean_filename(text):
-    text = re.sub(r'\s+', ' ', text).strip()
-    text = re.sub(r'[\\/*?:"<>|]', "", text)
-    text = text.replace(" ", "_")
-    return text
+MESES = {
+    "enero": "01", "febrero": "02", "marzo": "03", "abril": "04",
+    "mayo": "05", "junio": "06", "julio": "07", "agosto": "08",
+    "septiembre": "09", "octubre": "10", "noviembre": "11", "diciembre": "12"
+}
+
+def generate_ro_filename(titulo, fecha):
+    # Extraer numero del titulo (ej: "Año I - Nº 152")
+    m_num = re.search(r'(?:nº|nro|no|num)\D*(\d+)', titulo.lower())
+    num = m_num.group(1) if m_num else "sn"
+    
+    # Extraer fecha (ej: "viernes, 30 de enero de 2026")
+    m_date = re.search(r'(\d{1,2})\D+([a-z]+)\D+(\d{4})', fecha.lower())
+    if m_date:
+        dia = m_date.group(1).zfill(2)
+        mes_str = m_date.group(2)
+        anio = m_date.group(3)
+        mes = MESES.get(mes_str, "00")
+        fecha_fmt = f"{anio}{mes}{dia}"
+    else:
+        fecha_fmt = "00000000"
+        
+    return f"{fecha_fmt}_ro_{num}"
 
 def download_pdf(url, dest_path):
     if dest_path.exists():
@@ -136,9 +156,7 @@ def scrape_section(p, context, section_name, base_url, test_mode):
                 if not download_url.startswith("http"):
                     download_url = urljoin(base_url, download_url)
                     
-                clean_titulo = clean_filename(titulo)
-                clean_fecha = clean_filename(fecha)
-                filename = f"RO_{clean_titulo}_{clean_fecha}.pdf"
+                filename = f"{generate_ro_filename(titulo, fecha)}.pdf"
                 dest_path = download_dir / filename
                 
                 print(f"    📑 Documento: {titulo} | {fecha} | {paginas}")

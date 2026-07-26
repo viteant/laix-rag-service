@@ -85,6 +85,33 @@ class MetadataExtractor:
             if t in text_lower:
                 topics.append(t)
 
+        # 10. Registro Oficial: Fecha de Promulgación
+        publication_date = None
+        m_pub_date = re.search(r'(lunes|martes|miércoles|jueves|viernes|sábado|domingo)\s*,?\s*(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})', text_lower)
+        if m_pub_date:
+            # Ej: Miércoles, 14 de enero de 2026
+            publication_date = m_pub_date.group(0).capitalize()
+
+        # 11. Registro Oficial: Tipo de Norma
+        norm_type = None
+        if re.search(r'\b(ley orgánica|ley ordinaria)\b', text_lower):
+            norm_type = "Ley"
+        elif "decreto ejecutivo" in text_lower:
+            norm_type = "Decreto Ejecutivo"
+        elif "acuerdo ministerial" in text_lower or re.search(r'\bacuerdo\s+nro', text_lower):
+            norm_type = "Acuerdo"
+        elif "resolución" in text_lower or re.search(r'\bresoluci[oó]n\b', text_lower):
+            norm_type = "Resolución"
+
+        # 12. Registro Oficial: Disposiciones Derogatorias o Reformatorias
+        derogations = []
+        # Buscar fragmentos que hablen de derogar o reformar
+        derog_matches = re.finditer(r'(deróguese|derógase|sustitúyase|refórmese|derogar)[^\.]{10,150}(ley|decreto|artículo|acuerdo)[^\.]+', text_lower)
+        for m in derog_matches:
+            snippet = m.group(0).strip().replace('\n', ' ')
+            if len(snippet) < 200 and snippet.capitalize() not in derogations:
+                derogations.append(snippet.capitalize())
+
         return LegalCaseMetadata(
             court=court,
             chamber=chamber,
@@ -96,7 +123,10 @@ class MetadataExtractor:
             action_type=action_type,
             procedural_stage="casación" if "casaci" in text_lower else None,
             summary=summary,
-            topics=topics
+            topics=topics,
+            publication_date=publication_date,
+            norm_type=norm_type,
+            derogations=derogations
         )
 
     def process_case_metadata(self, db: Session, case_id: str) -> LegalCase:

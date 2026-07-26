@@ -17,3 +17,7 @@ class LegalCaseMetadata(BaseModel):
     outcome: Optional[str] = Field(default=None, description="Resultado del fallo (ej: casa la sentencia)")
     summary: Optional[str] = Field(default=None, description="Síntesis o resumen del caso")
     topics: List[str] = Field(default_factory=list, description="Temas jurídicos identificados")
+    # Campos adicionales para normativas (Registro Oficial)
+    publication_date: Optional[str] = Field(default=None, description="Fecha de publicación de la norma (Registro Oficial)")
+    norm_type: Optional[str] = Field(default=None, description="Tipo de norma (Ley Orgánica, Decreto, Acuerdo, Resolución)")
+    derogations: List[str] = Field(default_factory=list, description="Leyes o artículos explícitamente reformados o derogados")

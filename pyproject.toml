@@ -28,6 +28,8 @@ dependencies = [
     "tiktoken>=0.6.0",
     "rapidfuzz>=3.6.2",
     "ocrmypdf>=15.4.4",
+    "PyJWT>=2.8.0",
+    "passlib[bcrypt]>=1.7.4",
 ]
 
 [project.optional-dependencies]

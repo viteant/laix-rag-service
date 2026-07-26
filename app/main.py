@@ -25,12 +25,29 @@ for i in range(max_retries):
         else:
             print(f"❌ Error conectando a PostgreSQL tras {max_retries} intentos: {e}")
 
+from fastapi.middleware.cors import CORSMiddleware
+from app.api.auth_router import router as auth_router
+
 app = FastAPI(
     title=settings.APP_NAME,
     version="0.1.0",
     description="Servicio RAG Jurídico para LAIX Studio"
 )
 
+# Configuración de CORS
+origins = []
+if settings.CORS_ORIGINS:
+    origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins if origins else ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth_router)
 app.include_router(jurisprudence_router)
 app.include_router(admin_router)
 

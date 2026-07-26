@@ -127,6 +127,18 @@ def inventory_directory(base_dir: str):
     print(f"Duplicados: {duplicate_count}")
     print(f"Requieren OCR: {ocr_required_count}")
     print(f"Texto Embebido: {embedded_text_count}")
+    
+    # Check total pending in DB just in case some failed before
+    db = SessionLocal()
+    total_pending = db.query(SourceDocument).filter(
+        SourceDocument.status.in_([DocumentStatus.PENDING.value, "failed"])
+    ).count()
+    db.close()
+    
+    return {
+        "new_count": new_count,
+        "total_pending": total_pending
+    }
 
 
 if __name__ == "__main__":

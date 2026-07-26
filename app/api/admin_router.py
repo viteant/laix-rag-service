@@ -12,16 +12,10 @@ from app.core.database import get_db
 from app.database.models import SourceDocument, LegalCase, DocumentPage
 from app.tasks.ingest_tasks import ingest_source_document_task
 
-security = HTTPBearer(auto_error=False)
+from app.core.security import get_current_system
 
 router = APIRouter(prefix="/v1/admin", tags=["Administración e Ingesta"])
 
-
-def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Security(security)):
-    if settings.SERVICE_API_TOKEN:
-        if not credentials or credentials.credentials != settings.SERVICE_API_TOKEN:
-            raise HTTPException(status_code=401, detail="Token de autorización inválido o ausente.")
-    return True
 
 
 class RegisterDocumentRequest(BaseModel):
@@ -29,7 +23,7 @@ class RegisterDocumentRequest(BaseModel):
     source_type: Optional[str] = Field(default="document", description="Tipo de fuente: 'jurisprudence' o 'document'")
 
 
-@router.post("/documents", dependencies=[Depends(verify_token)])
+@router.post("/documents", dependencies=[Depends(get_current_system)])
 def register_and_ingest_document(req: RegisterDocumentRequest, db: Session = Depends(get_db)):
     path = pathlib.Path(req.filepath)
     if not path.exists() or not path.is_file():
@@ -84,7 +78,7 @@ def register_and_ingest_document(req: RegisterDocumentRequest, db: Session = Dep
     }
 
 
-@router.get("/documents/{document_id}/status", dependencies=[Depends(verify_token)])
+@router.get("/documents/{document_id}/status", dependencies=[Depends(get_current_system)])
 def get_ingestion_status(document_id: str, db: Session = Depends(get_db)):
     doc = db.query(SourceDocument).filter_by(id=document_id).first()
     if not doc:

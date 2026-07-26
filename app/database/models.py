@@ -11,6 +11,18 @@ import enum
 from app.core.database import Base
 
 
+class ApiClient(Base):
+    __tablename__ = "api_clients"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id = Column(String(100), unique=True, index=True, nullable=False)
+    hashed_secret = Column(String(255), nullable=False)
+    name = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    quota_limit = Column(Integer, default=1000, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class SourceType(str, enum.Enum):
     DOCUMENT = "document"
     JURISPRUDENCE = "jurisprudence"

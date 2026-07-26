@@ -170,22 +170,6 @@ def ingest_directory(source_dir: str, limit: Optional[int] = None, force: bool =
         res = process_single_pdf(db, pdf, force=force)
         if res == "success":
             success_count += 1
-            
-            # Notificamos cuando hemos logrado 1000 éxitos nuevos
-            if success_count % 1000 == 0:
-                total_processed = success_count + skipped_count + failed_count
-                subject = f"Progreso de Ingesta: {success_count} nuevos documentos procesados"
-                body = (
-                    f"<h2>Reporte Parcial de Ingesta</h2>"
-                    f"<p>El daemon de inyección ha procesado exitosamente <b>{success_count}</b> documentos nuevos en este lote.</p>"
-                    f"<ul>"
-                    f"<li><b>Nuevos Exitosos:</b> {success_count}</li>"
-                    f"<li><b>Omitidos/Ya procesados:</b> {skipped_count}</li>"
-                    f"<li><b>Fallidos:</b> {failed_count}</li>"
-                    f"</ul>"
-                    f"<p>Total pendientes en este lote: {len(pdf_files) - total_processed}</p>"
-                )
-                send_alert_email(subject, body)
         elif res == "skipped":
             skipped_count += 1
         elif res == "failed":
@@ -199,6 +183,12 @@ def ingest_directory(source_dir: str, limit: Optional[int] = None, force: bool =
     print(f"  - Omitidos:   {skipped_count}")
     print(f"  - Fallidos:   {failed_count}")
     print("==================================================")
+    
+    return {
+        "success": success_count,
+        "skipped": skipped_count,
+        "failed": failed_count
+    }
 
 
 if __name__ == "__main__":

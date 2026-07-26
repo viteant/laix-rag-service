@@ -10,16 +10,9 @@ from app.retrieval.hybrid_search import HybridSearch
 from app.generation.jurisprudence_answer import JurisprudenceAnswerGenerator
 from app.database.models import LegalCase, SourceDocument, LegalChunk, DocumentPage
 
-security = HTTPBearer(auto_error=False)
+from app.core.security import get_current_system
 
 router = APIRouter(prefix="/v1/jurisprudence", tags=["Jurisprudencia"])
-
-
-def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Security(security)):
-    if settings.SERVICE_API_TOKEN:
-        if not credentials or credentials.credentials != settings.SERVICE_API_TOKEN:
-            raise HTTPException(status_code=401, detail="Token de autorización inválido o ausente.")
-    return True
 
 
 class SearchFilters(BaseModel):
@@ -40,7 +33,7 @@ class AnswerRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20, description="Número de fuentes a considerar en la respuesta")
 
 
-@router.post("/search", dependencies=[Depends(verify_token)])
+@router.post("/search", dependencies=[Depends(get_current_system)])
 def search_jurisprudence(req: SearchRequest, db: Session = Depends(get_db)):
     filters_dict = req.filters.model_dump(exclude_none=True) if req.filters else None
     searcher = HybridSearch(db)
@@ -52,7 +45,7 @@ def search_jurisprudence(req: SearchRequest, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/answer", dependencies=[Depends(verify_token)])
+@router.post("/answer", dependencies=[Depends(get_current_system)])
 def generate_jurisprudence_answer(req: AnswerRequest, db: Session = Depends(get_db)):
     filters_dict = req.filters.model_dump(exclude_none=True) if req.filters else None
     generator = JurisprudenceAnswerGenerator(db)
@@ -60,7 +53,7 @@ def generate_jurisprudence_answer(req: AnswerRequest, db: Session = Depends(get_
     return response
 
 
-@router.get("/cases/{case_id}", dependencies=[Depends(verify_token)])
+@router.get("/cases/{case_id}", dependencies=[Depends(get_current_system)])
 def get_case_details(case_id: str, db: Session = Depends(get_db)):
     legal_case = db.query(LegalCase).filter_by(id=case_id).first()
     if not legal_case:
@@ -90,7 +83,7 @@ def get_case_details(case_id: str, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/documents/{document_id}", dependencies=[Depends(verify_token)])
+@router.get("/documents/{document_id}", dependencies=[Depends(get_current_system)])
 def get_document_details(document_id: str, db: Session = Depends(get_db)):
     source_doc = db.query(SourceDocument).filter_by(id=document_id).first()
     if not source_doc:

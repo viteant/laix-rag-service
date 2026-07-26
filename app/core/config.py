@@ -18,7 +18,13 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://redis:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/0"
 
-    SERVICE_API_TOKEN: str = "dev_secret_token_laix_rag_2026"
+    # Seguridad / JWT
+    JWT_SECRET_KEY: str = "super_secret_jwt_key_cambiar_en_produccion"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440 # 24 horas
+
+    # CORS
+    CORS_ORIGINS: str = ""
 
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     EMBEDDING_DIMENSIONS: int = 768

@@ -35,6 +35,14 @@ def run_daemon(interval_seconds: int = 300, idle_interval_seconds: int = 86400):
                 
                 # Si terminamos de procesar un lote (éxitos > 0) y ahora ya no queda nada, mandamos el correo.
                 if ingest_res and ingest_res.get("success", 0) > 0:
+                    failed_files = ingest_res.get("failed_files", [])
+                    failed_list_html = ""
+                    if failed_files:
+                        failed_list_html = "<h3>Archivos Fallidos:</h3><ul>"
+                        for f in failed_files:
+                            failed_list_html += f"<li>{f}</li>"
+                        failed_list_html += "</ul>"
+                        
                     subject = "✅ Lote de Ingesta Completado"
                     body = (
                         f"<h2>Ingesta Completada Exitosamente</h2>"
@@ -44,6 +52,7 @@ def run_daemon(interval_seconds: int = 300, idle_interval_seconds: int = 86400):
                         f"<li><b>Omitidos/Ya procesados:</b> {ingest_res.get('skipped', 0)}</li>"
                         f"<li><b>Fallidos:</b> {ingest_res.get('failed', 0)}</li>"
                         f"</ul>"
+                        f"{failed_list_html}"
                         f"<p>El sistema entrará en modo reposo hasta detectar nuevos archivos.</p>"
                     )
                     send_alert_email(subject, body)

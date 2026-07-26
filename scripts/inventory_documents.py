@@ -131,7 +131,7 @@ def inventory_directory(base_dir: str):
     # Check total pending in DB just in case some failed before
     db = SessionLocal()
     total_pending = db.query(SourceDocument).filter(
-        SourceDocument.status.in_([DocumentStatus.PENDING.value, "failed"])
+        SourceDocument.status == DocumentStatus.PENDING.value
     ).count()
     db.close()
     

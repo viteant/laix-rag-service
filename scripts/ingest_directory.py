@@ -165,6 +165,7 @@ def ingest_directory(source_dir: str, limit: Optional[int] = None, force: bool =
     success_count = 0
     skipped_count = 0
     failed_count = 0
+    failed_files = []
 
     for pdf in pdf_files:
         res = process_single_pdf(db, pdf, force=force)
@@ -174,6 +175,7 @@ def ingest_directory(source_dir: str, limit: Optional[int] = None, force: bool =
             skipped_count += 1
         elif res == "failed":
             failed_count += 1
+            failed_files.append(pdf.name)
 
     db.close()
 
@@ -187,7 +189,8 @@ def ingest_directory(source_dir: str, limit: Optional[int] = None, force: bool =
     return {
         "success": success_count,
         "skipped": skipped_count,
-        "failed": failed_count
+        "failed": failed_count,
+        "failed_files": failed_files
     }
 
 

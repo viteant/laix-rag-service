@@ -59,6 +59,28 @@ jobs:
               echo "$ENV_CONTENT" > .env
             fi
 
+            # 1.5 Configurar el Entorno Virtual del Host y Cronjob (para Scraper)
+            echo "🐍 Configurando dependencias del Host para Playwright y el Scraper..."
+            SUDO=""
+            if [ "$(id -u)" -ne 0 ]; then
+              SUDO="sudo"
+            fi
+            
+            $SUDO apt-get update -y || true
+            $SUDO apt-get install -y python3-venv || true
+
+            if [ ! -d ".venv" ]; then
+              python3 -m venv .venv
+            fi
+            source .venv/bin/activate
+            pip install --upgrade pip
+            pip install -e .
+            playwright install chromium --with-deps
+
+            echo "⏰ Activando cronjob..."
+            chmod +x scripts/setup_cron.sh
+            ./scripts/setup_cron.sh
+
             # 2. Determinar comando docker compose y permisos
             SUDO=""
             if [ "$(id -u)" -ne 0 ]; then

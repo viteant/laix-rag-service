@@ -4,8 +4,12 @@ import pathlib
 import re
 import argparse
 import time
+import random
+import fcntl
 import requests
 from pathlib import Path
+from datetime import datetime
+from dotenv import load_dotenv
 from urllib.parse import urljoin
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
@@ -44,6 +48,12 @@ def download_pdf(url, dest_path):
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         print(f"    ✅ Guardado como {dest_path.name}")
+        
+        # Espera natural entre descargas para no saturar al servidor
+        sleep_time = random.uniform(1.5, 3.5)
+        print(f"    ⏳ Esperando {sleep_time:.2f}s...")
+        time.sleep(sleep_time)
+        
         return True
     except Exception as e:
         print(f"    ❌ Error al descargar {url}: {e}")
@@ -196,6 +206,30 @@ def run_scraper(test_mode=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scraper Registro Oficial del Ecuador (Multisección)")
     parser.add_argument("--test-mode", action="store_true", help="Prueba 1 doc de pág 1 y pág 2 por sección")
+    parser.add_argument("--force", action="store_true", help="Forzar la ejecución ignorando si ya corrió hoy")
     args = parser.parse_args()
     
+    # 1. Asegurar que solo corra una instancia a la vez
+    lock_path = BASE_DOWNLOAD_DIR / ".scraper.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        lock_file = open(lock_path, "w")
+        fcntl.lockf(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        print("❌ El scraper ya se encuentra en ejecución (lockfile detectado). Saliendo.")
+        sys.exit(0)
+        
+    # 2. Verificar si ya se ejecutó el día de hoy (salvo que sea test o forzado)
+    today = datetime.now().strftime("%Y-%m-%d")
+    run_file = BASE_DOWNLOAD_DIR / ".scraper_last_run"
+    
+    if not args.test_mode and not args.force and run_file.exists():
+        if run_file.read_text().strip() == today:
+            print(f"✅ El scraper ya se ejecutó con éxito el día de hoy ({today}). Saliendo.")
+            sys.exit(0)
+            
     run_scraper(test_mode=args.test_mode)
+    
+    # 3. Marcar como ejecutado si fue exitoso
+    if not args.test_mode:
+        run_file.write_text(today)

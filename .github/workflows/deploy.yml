@@ -81,6 +81,9 @@ jobs:
             chmod +x scripts/setup_cron.sh
             ./scripts/setup_cron.sh
 
+            echo "🚀 Lanzando scraper en segundo plano (se cancelará solo si ya corrió hoy o está ejecutándose)..."
+            nohup /opt/laix-rag/.venv/bin/python /opt/laix-rag/scripts/scraper_registro_oficial.py >> /opt/laix-rag/scraper_cron.log 2>&1 &
+
             # 2. Determinar comando docker compose y permisos
             SUDO=""
             if [ "$(id -u)" -ne 0 ]; then

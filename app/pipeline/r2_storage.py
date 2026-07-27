@@ -1,5 +1,6 @@
 from pathlib import Path
 from datetime import datetime
+import re
 
 import boto3
 from botocore.exceptions import ClientError
@@ -16,9 +17,20 @@ class R2VerificationError(RuntimeError):
 def r2_key_for(run_asset: PipelineRunAsset, prefix: str) -> str:
     asset = run_asset.asset
     source = asset.source
+    base = (prefix.strip("/"), source.source_type)
+    if source.source_type in {"jurisprudencia", "documentos"}:
+        return "/".join((*base, asset.canonical_filename))
     publication_date = (asset.metadata_json or {}).get("publication_date", "")
-    year = publication_date[:4] if len(publication_date) >= 4 else "undated"
-    return "/".join((prefix.strip("/"), source.source_type, source.source_subtype, year, asset.canonical_filename))
+    year = publication_date[:4] if re.match(r"\d{4}-\d{2}-\d{2}", publication_date) else None
+    if not year:
+        match = re.match(r"\d{8}.*", asset.canonical_filename)
+        year = asset.canonical_filename[4:8] if match else None
+    if not year:
+        match = re.match(r"(\d{4})", asset.canonical_filename)
+        year = match.group(1) if match else None
+    if not year:
+        raise ValueError("Registro Oficial requires a publication year for its R2 key")
+    return "/".join((*base, source.source_subtype, year, asset.canonical_filename))
 
 
 class R2StorageService:

@@ -1,0 +1,11 @@
+[Unit]
+Description=LAIX public-source pipeline scheduler
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/laix-rag
+ExecStart=/opt/laix-rag/.venv/bin/python /opt/laix-rag/scripts/trigger_public_pipeline.py
+Restart=always
+RestartSec=60

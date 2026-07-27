@@ -77,15 +77,10 @@ jobs:
             pip install -e .
             playwright install chromium --with-deps
 
-            echo "⏰ Activando cronjob..."
-            chmod +x scripts/setup_cron.sh
-            ./scripts/setup_cron.sh
-
-            echo "🧹 Normalizando nombres de archivos descargados previamente (snake_case)..."
-            /opt/laix-rag/.venv/bin/python /opt/laix-rag/scripts/rename_pdfs.py || true
-
-            echo "🚀 Lanzando scraper en segundo plano (se cancelará solo si ya corrió hoy o está ejecutándose)..."
-            nohup /opt/laix-rag/.venv/bin/python /opt/laix-rag/scripts/scraper_registro_oficial.py >> /opt/laix-rag/scraper_cron.log 2>&1 &
+            echo "⏱️ Instalando scheduler relativo del pipeline público..."
+            $SUDO install -D -m 644 deploy/systemd/laix-public-pipeline.service /etc/systemd/system/laix-public-pipeline.service
+            $SUDO systemctl daemon-reload
+            $SUDO systemctl enable --now laix-public-pipeline.service
 
             # 2. Determinar comando docker compose y permisos
             SUDO=""

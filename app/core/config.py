@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     R2_BUCKET_NAME: str = ""
     R2_REGION: str = "auto"
     R2_PREFIX: str = "public"
+    PUBLIC_PIPELINE_SCHEDULER_ENABLED: bool = False
 
     # Alertas SMTP
     SMTP_HOST: str = ""

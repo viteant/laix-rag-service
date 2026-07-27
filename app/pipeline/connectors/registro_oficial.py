@@ -1,6 +1,9 @@
 import re
 import unicodedata
 from datetime import date
+from urllib.parse import urljoin
+
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 from app.pipeline.connectors.base import DiscoveredAsset
 
@@ -29,6 +32,15 @@ REGISTRO_OFICIAL_SUBTYPES = {
     "edicion_constitucional",
     "edicion_juridica",
     "indice_mensual",
+}
+
+REGISTRO_OFICIAL_SECTIONS = {
+    "registro_oficial": "https://www.registroficial.gob.ec/245427-2/",
+    "suplementos": "https://www.registroficial.gob.ec/255776-2/",
+    "edicion_especial": "https://www.registroficial.gob.ec/261974-2/",
+    "edicion_constitucional": "https://www.registroficial.gob.ec/267099-2/",
+    "edicion_juridica": "https://www.registroficial.gob.ec/266381-2/",
+    "indice_mensual": "https://www.registroficial.gob.ec/265554-2/",
 }
 
 
@@ -95,3 +107,47 @@ def registro_oficial_asset(title: str, publication_date: str, subtype: str, sour
             "display_title": title,
         },
     )
+
+
+class RegistroOficialConnector:
+    """Playwright discovery adapter. It never downloads documents itself."""
+
+    def __init__(self, subtype: str, base_url: str):
+        if subtype not in REGISTRO_OFICIAL_SUBTYPES:
+            raise ValueError(f"Unsupported Registro Oficial subtype: {subtype!r}")
+        self.subtype = subtype
+        self.base_url = base_url
+
+    def discover(self) -> list[DiscoveredAsset]:
+        discovered: list[DiscoveredAsset] = []
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            page = browser.new_page()
+            try:
+                page.goto(self.base_url, wait_until="networkidle", timeout=60000)
+                page.wait_for_selector("ul#tree2", timeout=30000, state="attached")
+                folders = page.locator("ul#tree2 a.post-imagen-link")
+                for index in range(folders.count()):
+                    folders.nth(index).evaluate("element => element.click()")
+                    page.wait_for_selector("#child-post-imagen", timeout=15000, state="attached")
+                    while True:
+                        cards = page.locator(".card__item_post_imagen")
+                        for card_index in range(cards.count()):
+                            card = cards.nth(card_index)
+                            title = card.locator("h4.card__title_numero_imagen").inner_text().strip()
+                            dates = card.locator("p.txt_fecha_post_imagen").all_inner_texts()
+                            href = card.locator("a.cta_post_imagen").get_attribute("href")
+                            if href and dates:
+                                discovered.append(registro_oficial_asset(title, dates[0].strip(), self.subtype, urljoin(self.base_url, href)))
+                        pagination = page.locator("ul.k-pagination__pages a.button-post-imagen-link")
+                        current = page.locator("ul.k-pagination__pages a.active").inner_text() if page.locator("ul.k-pagination__pages a.active").count() else "1"
+                        next_link = pagination.filter(has_text=str(int(current) + 1))
+                        if not next_link.count():
+                            break
+                        next_link.first.evaluate("element => element.click()")
+                        page.wait_for_timeout(500)
+            except PlaywrightTimeoutError as error:
+                raise RuntimeError(f"Registro Oficial layout unavailable for {self.subtype}") from error
+            finally:
+                browser.close()
+        return discovered

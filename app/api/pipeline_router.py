@@ -8,6 +8,7 @@ from app.pipeline.executor import PublicPipelineExecutor
 from app.pipeline.models import PipelineRun, PipelineRunStatus
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
+from app.pipeline.public_sources import discover_public_sources
 
 router = APIRouter(prefix="/v1/admin/pipeline", tags=["Pipeline público"])
 
@@ -50,6 +51,20 @@ def create_manual_run(db: Session = Depends(get_db)):
 @router.get("/runs", dependencies=[Depends(get_current_system)])
 def list_runs(db: Session = Depends(get_db)):
     return [_serialize(run) for run in db.query(PipelineRun).order_by(PipelineRun.requested_at.desc()).limit(50)]
+
+
+@router.post("/runs/{run_id}/discover", dependencies=[Depends(get_current_system)])
+def discover_run_sources(run_id: str, db: Session = Depends(get_db)):
+    run = _run_or_404(db, run_id)
+    if run.status != PipelineRunStatus.PENDING.value:
+        raise HTTPException(status_code=409, detail="Discovery requires a pending run")
+    try:
+        discovered = discover_public_sources(db, run)
+    except Exception as error:
+        notify_pipeline_event(run, "descubrimiento fallido", str(error))
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    notify_pipeline_event(run, "descubrimiento completado", str(discovered))
+    return {"run": _serialize(run), "new_assets_by_subtype": discovered}
 
 
 @router.post("/runs/{run_id}/pause", dependencies=[Depends(get_current_system)])

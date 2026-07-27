@@ -45,8 +45,15 @@ REGISTRO_OFICIAL_SECTIONS = {
 }
 
 
-def folder_failure_message(subtype: str, folder_name: str) -> str:
-    return f"Fail [{subtype} - {folder_name or 'sin título'}]"
+def folder_message(kind: str, subtype: str, year: str, folder_name: str) -> str:
+    return f"{kind} [{subtype} - {year or 'sin año'} - {folder_name or 'sin título'}]"
+
+
+def folder_year(folder) -> str:
+    parent = folder.locator("xpath=ancestor::li[contains(@class, 'kilur-primer-li') and contains(@class, 'branch')][1]")
+    parent_text = " ".join(parent.all_inner_texts())
+    match = re.search(r"\b(20\d{2})\b", parent_text)
+    return match.group(1) if match else "sin año"
 
 
 def _normalized(value: str) -> str:
@@ -143,8 +150,31 @@ class RegistroOficialConnector:
                     folder = folders.nth(index)
                     folder_titles = folder.all_inner_texts()
                     folder_name = folder_titles[0].strip() if folder_titles else "sin título"
+                    year = folder_year(folder)
                     try:
-                        folder.evaluate("element => element.click()")
+                        title_matches = False
+                        for _ in range(2):
+                            folder.evaluate("element => element.click()")
+                            try:
+                                page.wait_for_function(
+                                    "expected => document.querySelector('.title-folder-archivos')?.textContent?.trim() === expected",
+                                    arg=folder_name, timeout=10000,
+                                )
+                                title_matches = True
+                                break
+                            except PlaywrightTimeoutError:
+                                continue
+                        if not title_matches:
+                            print(folder_message("Fail", self.subtype, year, folder_name) + ": título de carpeta no coincidió")
+                            if on_progress:
+                                on_progress(index + 1)
+                            continue
+                        file_titles = page.locator(".title-files-archivos").all_inner_texts()
+                        if any(title.strip().lower() == "sin archivos post" for title in file_titles):
+                            print(folder_message("Sin Archivo", self.subtype, year, folder_name))
+                            if on_progress:
+                                on_progress(index + 1)
+                            continue
                         page.wait_for_function(
                             "() => document.querySelectorAll('#child-post-imagen .card__item_post_imagen').length > 0",
                             timeout=15000,
@@ -162,7 +192,7 @@ class RegistroOficialConnector:
                                 dates = card.locator("p.txt_fecha_post_imagen").all_inner_texts()
                                 href = card.locator("a.cta_post_imagen").get_attribute("href")
                                 if not href or not dates or not titles:
-                                    print(f"{folder_failure_message(self.subtype, folder_name)}: tarjeta incompleta")
+                                    print(folder_message("Fail", self.subtype, year, folder_name) + ": tarjeta incompleta")
                                     continue
                                 discovered.append(registro_oficial_asset(titles[0].strip(), dates[0].strip(), self.subtype, urljoin(self.base_url, href)))
                                 if max_assets and len(discovered) >= max_assets:
@@ -180,7 +210,7 @@ class RegistroOficialConnector:
                             except PlaywrightTimeoutError:
                                 break
                     except (PlaywrightTimeoutError, ValueError) as error:
-                        print(f"{folder_failure_message(self.subtype, folder_name)}: {error}")
+                        print(folder_message("Fail", self.subtype, year, folder_name) + f": {error}")
                     if on_progress:
                         on_progress(index + 1)
             except PlaywrightTimeoutError as error:

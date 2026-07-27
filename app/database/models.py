@@ -27,6 +27,8 @@ class SourceType(str, enum.Enum):
     DOCUMENT = "document"
     JURISPRUDENCE = "jurisprudence"
     LEGISLATION = "legislation"
+    REGISTRO_OFICIAL = "registro_oficial"
+    LAWS = "laws"
 
 
 class DocumentStatus(str, enum.Enum):

@@ -33,9 +33,9 @@ class PipelineRunStatus(str, enum.Enum):
 class PipelinePhase(str, enum.Enum):
     DOWNLOAD = "download"
     OPTIMIZE = "optimize"
+    EXTRACT_TEXT = "extract_text"
     UPLOAD = "upload"
     VERIFY_UPLOAD = "verify_upload"
-    EXTRACT_TEXT = "extract_text"
     INGEST_RAG = "ingest_rag"
     CLEANUP = "cleanup"
 
@@ -101,7 +101,8 @@ class PipelineAsset(Base):
     logical_identity = Column(String(512), nullable=False)
     canonical_filename = Column(String(512), nullable=False)
     source_url = Column(Text, nullable=True)
-    local_pdf_path = Column(Text, nullable=True)
+    downloaded_pdf_path = Column(Text, nullable=True)
+    optimized_pdf_path = Column(Text, nullable=True)
     local_txt_path = Column(Text, nullable=True)
     original_sha256 = Column(String(64), nullable=True, index=True)
     optimized_sha256 = Column(String(64), nullable=True, index=True)

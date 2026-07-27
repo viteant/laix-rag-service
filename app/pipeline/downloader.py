@@ -46,7 +46,7 @@ class DownloadService:
         destination = self.destination_for(run_asset)
         if destination.exists() and asset.original_sha256 == sha256_file(destination):
             run_asset.status = PipelineAssetStatus.DOWNLOADED.value
-            asset.local_pdf_path = str(destination)
+            asset.downloaded_pdf_path = str(destination)
             return destination
 
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -68,7 +68,7 @@ class DownloadService:
 
             temporary.replace(destination)
             asset.original_sha256 = sha256_file(destination)
-            asset.local_pdf_path = str(destination)
+            asset.downloaded_pdf_path = str(destination)
             asset.status = PipelineAssetStatus.DOWNLOADED.value
             run_asset.status = PipelineAssetStatus.DOWNLOADED.value
             run_asset.detail = None

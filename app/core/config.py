@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     EMBEDDING_DIMENSIONS: int = 768
 
+    # Cloudflare R2 (S3-compatible API)
+    R2_ENDPOINT_URL: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = ""
+    R2_REGION: str = "auto"
+    R2_PREFIX: str = "public"
+
     # Alertas SMTP
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

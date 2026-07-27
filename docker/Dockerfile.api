@@ -20,6 +20,10 @@ COPY pyproject.toml .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir . --extra-index-url https://download.pytorch.org/whl/cpu
 
+# Registro Oficial discovery uses Playwright; keep Chromium inside the image so
+# manual, scheduled, and deployed runs share the same browser runtime.
+RUN playwright install --with-deps chromium
+
 COPY app/ /app/app/
 COPY scripts/ /app/scripts/
 

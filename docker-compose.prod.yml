@@ -113,6 +113,9 @@ services:
           memory: 3000M
 
   watcher:
+    # Legacy direct-ingestion daemon. Keep it opt-in: public sources must use
+    # the auditable batch pipeline, R2 verification and storage safeguards.
+    profiles: ["legacy"]
     build:
       context: .
       dockerfile: docker/Dockerfile.worker

@@ -156,6 +156,14 @@ def get_pipeline_runs():
 pipeline_runs = get_pipeline_runs()
 if pipeline_runs:
     st.dataframe(pd.DataFrame(pipeline_runs), use_container_width=True)
+    db = SessionLocal()
+    try:
+        active_row = next((row for row in pipeline_runs if row["estado"] in {"running", "paused"}), None)
+        if active_row:
+            counts = db.execute(text("SELECT status, count(*) FROM pipeline_run_assets WHERE pipeline_run_id = :run_id GROUP BY status"), {"run_id": active_row["id"]}).all()
+            st.caption("Progreso por estado: " + " · ".join(f"{status}: {count}" for status, count in counts))
+    finally:
+        db.close()
     active = next((run for run in pipeline_runs if run["estado"] in {"running", "paused"}), None)
     if active:
         st.caption(f"Lote activo: {active['id']} · fase {active['fase']}")

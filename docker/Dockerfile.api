@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Registro Oficial discovery uses Playwright; keep Chromium inside the image so
 # manual, scheduled, and deployed runs share the same browser runtime.
-RUN playwright install --with-deps chromium
+RUN playwright install --with-deps chromium chromium-headless-shell
 
 COPY app/ /app/app/
 COPY scripts/ /app/scripts/

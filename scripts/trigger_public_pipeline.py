@@ -11,6 +11,7 @@ from app.core.database import SessionLocal
 from app.core.config import settings
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.scheduler import create_due_successor
+from app.tasks.pipeline_tasks import discover_public_sources_task
 
 
 def main() -> int:
@@ -21,6 +22,7 @@ def main() -> int:
                 run = create_due_successor(db)
                 if run:
                     notify_pipeline_event(run, "programado", "Creado 24 horas después de la finalización exitosa anterior.")
+                    discover_public_sources_task.delay(str(run.id))
                     print(f"Scheduled public pipeline run: {run.id}")
             finally:
                 db.close()

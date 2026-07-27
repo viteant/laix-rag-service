@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/laix-rag
-ExecStart=/opt/laix-rag/.venv/bin/python /opt/laix-rag/scripts/trigger_public_pipeline.py
+# The API container shares the Docker network where PostgreSQL is reachable as `postgres`.
+ExecStart=/usr/bin/docker compose -f /opt/laix-rag/docker-compose.prod.yml exec -T api python scripts/trigger_public_pipeline.py
 Restart=always
 RestartSec=60

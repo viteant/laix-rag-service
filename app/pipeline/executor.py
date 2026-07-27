@@ -36,6 +36,11 @@ class PublicPipelineExecutor:
     def _run_assets(self, run: PipelineRun) -> list[PipelineRunAsset]:
         return self.db.query(PipelineRunAsset).filter_by(pipeline_run_id=run.id).order_by(PipelineRunAsset.created_at).all()
 
+    def upload_and_verify(self, run_asset: PipelineRunAsset) -> None:
+        if self.storage is None:
+            self.storage = R2StorageService(self.db)
+        self.storage.upload_and_verify(run_asset)
+
     def _execute_phase(self, run: PipelineRun, required_status: str, action) -> None:
         failures = []
         for run_asset in self._run_assets(run):
@@ -70,10 +75,7 @@ class PublicPipelineExecutor:
             PipelinePhase.DOWNLOAD.value: (PipelineAssetStatus.DISCOVERED.value, self.downloader.download),
             PipelinePhase.OPTIMIZE.value: (PipelineAssetStatus.DOWNLOADED.value, self.transformer.optimize),
             PipelinePhase.EXTRACT_TEXT.value: (PipelineAssetStatus.OPTIMIZED.value, self.transformer.extract_text),
-            PipelinePhase.UPLOAD.value: (
-                PipelineAssetStatus.TEXT_READY.value,
-                (self.storage or R2StorageService(self.db)).upload_and_verify,
-            ),
+            PipelinePhase.UPLOAD.value: (PipelineAssetStatus.TEXT_READY.value, self.upload_and_verify),
             PipelinePhase.INGEST_RAG.value: (PipelineAssetStatus.VERIFIED.value, self.rag_loader.load),
             PipelinePhase.CLEANUP.value: (PipelineAssetStatus.INGESTED.value, self.cleanup_local_pdfs),
         }

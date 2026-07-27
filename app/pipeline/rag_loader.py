@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.database.models import DocumentPage, LegalChunk, SourceDocument
 from app.pipeline.models import PipelineAssetStatus, PipelineRunAsset
+from app.pipeline.registro_classifier import categories_for_page_range
 from app.processing.case_detector import CaseDetector
 from app.processing.chunker import TextChunker
 from app.processing.document_builder import DocumentBuilder
@@ -33,6 +34,23 @@ class RagTxtLoader:
 
     def __init__(self, db: Session):
         self.db = db
+
+    @staticmethod
+    def _apply_registro_classification(legal_case, asset) -> None:
+        """Attach classification to the case before sections/chunks are created."""
+        if asset.source.source_type != "registro_oficial":
+            return
+        classification = (asset.metadata_json or {}).get("classification")
+        if not classification:
+            return
+        metadata = dict(legal_case.case_metadata or {})
+        metadata["registro_oficial_classification"] = classification
+        metadata["registro_oficial_subtype"] = asset.source.source_subtype
+        metadata["registro_oficial_categories"] = categories_for_page_range(
+            classification, legal_case.page_start, legal_case.page_end,
+        )
+        metadata["norm_type"] = classification.get("primary_category", "OTRO")
+        legal_case.case_metadata = metadata
 
     def load(self, run_asset: PipelineRunAsset) -> SourceDocument:
         asset = run_asset.asset
@@ -95,6 +113,8 @@ class RagTxtLoader:
             chunks = []
             for legal_case in cases:
                 metadata_extractor.process_case_metadata(self.db, str(legal_case.id))
+                self._apply_registro_classification(legal_case, asset)
+                self.db.commit()
                 section_detector.detect_sections(self.db, str(legal_case.id))
                 chunks.extend(chunker.process_case_chunks(self.db, str(legal_case.id)))
 

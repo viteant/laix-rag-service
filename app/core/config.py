@@ -29,6 +29,18 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     EMBEDDING_DIMENSIONS: int = 768
 
+    # LLM classifier for Registro Oficial indexes
+    LLM_CLASSIFIER_ENABLED: bool = False
+    LLM_CLASSIFIER_PROVIDER: str = "openai_compatible"
+    LLM_CLASSIFIER_MODEL: str = ""
+    LLM_CLASSIFIER_API_KEY: str = ""
+    LLM_CLASSIFIER_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_CLASSIFIER_TIMEOUT_SECONDS: int = 45
+    LLM_CLASSIFIER_TEMPERATURE: float = 0
+    LLM_CLASSIFIER_MAX_INDEX_PAGES: int = 3
+    LLM_CLASSIFIER_MAX_INPUT_CHARS: int = 18000
+    LLM_CLASSIFIER_PROMPT_VERSION: str = "registro-oficial-v1"
+
     # Cloudflare R2 (S3-compatible API)
     R2_ENDPOINT_URL: str = ""
     R2_ACCESS_KEY_ID: str = ""

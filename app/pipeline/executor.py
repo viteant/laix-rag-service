@@ -7,6 +7,7 @@ from app.pipeline.models import PipelineAssetStatus, PipelinePhase, PipelineRun,
 from app.pipeline.orchestrator import PipelineOrchestrator
 from app.pipeline.r2_storage import R2StorageService
 from app.pipeline.rag_loader import RagTxtLoader
+from app.pipeline.registro_classifier import RegistroOficialClassifier
 from app.pipeline.transform import TransformService
 
 
@@ -17,12 +18,13 @@ class BatchExecutionError(RuntimeError):
 class PublicPipelineExecutor:
     """Executes one phase at a time and enforces batch-wide phase barriers."""
 
-    def __init__(self, db: Session, downloader=None, transformer=None, storage=None, rag_loader=None):
+    def __init__(self, db: Session, downloader=None, transformer=None, storage=None, rag_loader=None, classifier=None):
         self.db = db
         self.downloader = downloader or DownloadService(db)
         self.transformer = transformer or TransformService(db)
         self.storage = storage
         self.rag_loader = rag_loader or RagTxtLoader(db)
+        self.classifier = classifier or RegistroOficialClassifier()
 
     def _ensure_running(self, run: PipelineRun) -> None:
         self.db.refresh(run)
@@ -75,7 +77,8 @@ class PublicPipelineExecutor:
             PipelinePhase.DOWNLOAD.value: (PipelineAssetStatus.DISCOVERED.value, self.downloader.download),
             PipelinePhase.OPTIMIZE.value: (PipelineAssetStatus.DOWNLOADED.value, self.transformer.optimize),
             PipelinePhase.EXTRACT_TEXT.value: (PipelineAssetStatus.OPTIMIZED.value, self.transformer.extract_text),
-            PipelinePhase.UPLOAD.value: (PipelineAssetStatus.TEXT_READY.value, self.upload_and_verify),
+            PipelinePhase.CLASSIFY_REGISTRO_OFICIAL.value: (PipelineAssetStatus.TEXT_READY.value, self.classifier.classify),
+            PipelinePhase.UPLOAD.value: (PipelineAssetStatus.CLASSIFIED.value, self.upload_and_verify),
             PipelinePhase.INGEST_RAG.value: (PipelineAssetStatus.VERIFIED.value, self.rag_loader.load),
             PipelinePhase.CLEANUP.value: (PipelineAssetStatus.INGESTED.value, self.cleanup_local_pdfs),
         }

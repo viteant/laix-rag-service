@@ -67,6 +67,9 @@ class FullTextSearch:
             if filters.get("source_type"):
                 sql += " AND sd.source_type = :source_type"
                 params["source_type"] = filters["source_type"]
+            if filters.get("registro_oficial_category"):
+                sql += " AND COALESCE(c.metadata->'registro_oficial_categories', '[]'::jsonb) ? :registro_oficial_category"
+                params["registro_oficial_category"] = filters["registro_oficial_category"]
 
         sql += " ORDER BY rank_score DESC LIMIT :limit;"
 

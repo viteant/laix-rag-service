@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 
 from app.database.models import LegalCase, LegalSection, LegalChunk
+from app.pipeline.registro_classifier import categories_for_page_range
 
 
 class TextChunker:
@@ -64,7 +65,9 @@ class TextChunker:
         # Extraer metadatos para inyección temporal
         case_meta = legal_case.case_metadata or {}
         pub_date = case_meta.get("publication_date")
-        n_type = case_meta.get("norm_type")
+        classification = case_meta.get("registro_oficial_classification") or {}
+        categories = categories_for_page_range(classification, section.page_start, section.page_end) if classification else []
+        n_type = categories[0] if categories else case_meta.get("norm_type")
         
         # Crear encabezado temporal si es Registro Oficial
         if pub_date or n_type:
@@ -85,6 +88,8 @@ class TextChunker:
             "page_end": section.page_end,
             "publication_date": pub_date,
             "norm_type": n_type,
+            "registro_oficial_subtype": case_meta.get("registro_oficial_subtype"),
+            "registro_oficial_categories": categories,
         }
 
         chunk = LegalChunk(

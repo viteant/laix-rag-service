@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
 
+from collections.abc import Callable
+
 from app.pipeline.connectors.registro_oficial import REGISTRO_OFICIAL_SECTIONS, RegistroOficialConnector
 from app.pipeline.discovery import DiscoveryService
 from app.pipeline.models import PipelineRun, PipelineSource
@@ -22,15 +24,25 @@ def ensure_public_sources(db: Session) -> list[PipelineSource]:
     return sources
 
 
-def discover_public_sources(db: Session, run: PipelineRun) -> dict[str, int]:
+def discover_public_sources(
+    db: Session,
+    run: PipelineRun,
+    should_continue: Callable[[], bool] | None = None,
+    on_progress: Callable[[str, int], None] | None = None,
+) -> dict[str, int]:
     counts: dict[str, int] = {}
     discovery = DiscoveryService(db)
     for source in ensure_public_sources(db):
+        if should_continue and not should_continue():
+            break
         if not source.is_enabled:
             continue
         connector = RegistroOficialConnector(source.source_subtype, source.base_url)
         count = 0
-        for candidate in connector.discover():
+        for candidate in connector.discover(
+            should_continue=should_continue,
+            on_progress=(lambda folders, subtype=source.source_subtype: on_progress(subtype, folders)) if on_progress else None,
+        ):
             _, created = discovery.record(run, source, candidate)
             count += int(created)
         db.commit()

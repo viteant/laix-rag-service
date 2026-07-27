@@ -5,6 +5,7 @@ celery_app = Celery(
     "laix_rag_worker",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
+    include=["app.tasks.ingest_tasks", "app.tasks.pipeline_tasks"],
 )
 
 celery_app.conf.update(

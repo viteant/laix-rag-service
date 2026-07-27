@@ -1,6 +1,7 @@
 import re
 import unicodedata
 from datetime import date
+from collections.abc import Callable
 from urllib.parse import urljoin
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
@@ -118,7 +119,11 @@ class RegistroOficialConnector:
         self.subtype = subtype
         self.base_url = base_url
 
-    def discover(self) -> list[DiscoveredAsset]:
+    def discover(
+        self,
+        should_continue: Callable[[], bool] | None = None,
+        on_progress: Callable[[int], None] | None = None,
+    ) -> list[DiscoveredAsset]:
         discovered: list[DiscoveredAsset] = []
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
@@ -128,6 +133,8 @@ class RegistroOficialConnector:
                 page.wait_for_selector("ul#tree2", timeout=30000, state="attached")
                 folders = page.locator("ul#tree2 a.post-imagen-link")
                 for index in range(folders.count()):
+                    if should_continue and not should_continue():
+                        break
                     folders.nth(index).evaluate("element => element.click()")
                     page.wait_for_selector("#child-post-imagen", timeout=15000, state="attached")
                     seen_pages: set[str] = set()
@@ -157,6 +164,8 @@ class RegistroOficialConnector:
                             )
                         except PlaywrightTimeoutError:
                             break
+                    if on_progress:
+                        on_progress(index + 1)
             except PlaywrightTimeoutError as error:
                 raise RuntimeError(f"Registro Oficial layout unavailable for {self.subtype}") from error
             finally:

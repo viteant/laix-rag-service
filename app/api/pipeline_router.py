@@ -8,7 +8,7 @@ from app.pipeline.executor import PublicPipelineExecutor
 from app.pipeline.models import PipelineRun, PipelineRunStatus
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
-from app.pipeline.public_sources import discover_public_sources
+from app.tasks.pipeline_tasks import discover_public_sources_task
 
 router = APIRouter(prefix="/v1/admin/pipeline", tags=["Pipeline público"])
 
@@ -58,13 +58,8 @@ def discover_run_sources(run_id: str, db: Session = Depends(get_db)):
     run = _run_or_404(db, run_id)
     if run.status != PipelineRunStatus.PENDING.value:
         raise HTTPException(status_code=409, detail="Discovery requires a pending run")
-    try:
-        discovered = discover_public_sources(db, run)
-    except Exception as error:
-        notify_pipeline_event(run, "descubrimiento fallido", str(error))
-        raise HTTPException(status_code=502, detail=str(error)) from error
-    notify_pipeline_event(run, "descubrimiento completado", str(discovered))
-    return {"run": _serialize(run), "new_assets_by_subtype": discovered}
+    task = discover_public_sources_task.delay(str(run.id))
+    return {"run": _serialize(run), "task_id": task.id}
 
 
 @router.post("/runs/{run_id}/pause", dependencies=[Depends(get_current_system)])
@@ -82,6 +77,9 @@ def resume_run(run_id: str, db: Session = Depends(get_db)):
     PipelineOrchestrator.start(run)
     db.commit()
     notify_pipeline_event(run, "reanudado", "Lote reanudado por un administrador.")
+    if run.current_phase == "download" and not (run.summary or {}).get("discovery_completed"):
+        task = discover_public_sources_task.delay(str(run.id))
+        return {**_serialize(run), "task_id": task.id}
     return _serialize(run)
 
 

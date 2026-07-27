@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 # Asegurar que importamos los modulos correctamente
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
 from app.core.database import SessionLocal
+from app.pipeline.models import PipelineRun
+from app.pipeline.notifier import notify_pipeline_event
+from app.pipeline.orchestrator import PipelineOrchestrator
 
 load_dotenv()
 
@@ -130,3 +133,55 @@ else:
 if st.button("🔄 Refrescar Datos"):
     st.cache_data.clear()
     st.rerun()
+
+
+st.markdown("---")
+st.subheader("Pipeline de fuentes públicas")
+
+@st.cache_data(ttl=15)
+def get_pipeline_runs():
+    db = SessionLocal()
+    try:
+        rows = db.query(PipelineRun).order_by(PipelineRun.requested_at.desc()).limit(20).all()
+        return [{
+            "id": str(row.id), "origen": row.trigger, "estado": row.status,
+            "fase": row.current_phase, "solicitado": row.requested_at,
+            "siguiente ejecución": row.next_run_at, "error": row.error_message,
+        } for row in rows]
+    finally:
+        db.close()
+
+
+pipeline_runs = get_pipeline_runs()
+if pipeline_runs:
+    st.dataframe(pd.DataFrame(pipeline_runs), use_container_width=True)
+    active = next((run for run in pipeline_runs if run["estado"] in {"running", "paused"}), None)
+    if active:
+        st.caption(f"Lote activo: {active['id']} · fase {active['fase']}")
+        action_col, reason_col = st.columns([1, 2])
+        reason = reason_col.text_input("Motivo de cancelación", key="pipeline_cancel_reason")
+        db = SessionLocal()
+        try:
+            run = db.query(PipelineRun).filter_by(id=active["id"]).first()
+            if action_col.button("Pausar lote", disabled=active["estado"] != "running"):
+                PipelineOrchestrator.pause(run)
+                db.commit()
+                notify_pipeline_event(run, "pausado", "Pausa solicitada desde el dashboard.")
+                st.cache_data.clear()
+                st.rerun()
+            if action_col.button("Reanudar lote", disabled=active["estado"] != "paused"):
+                PipelineOrchestrator.start(run)
+                db.commit()
+                notify_pipeline_event(run, "reanudado", "Reanudado desde el dashboard.")
+                st.cache_data.clear()
+                st.rerun()
+            if action_col.button("Cancelar lote", disabled=not reason):
+                PipelineOrchestrator.cancel(run, reason)
+                db.commit()
+                notify_pipeline_event(run, "cancelado", reason)
+                st.cache_data.clear()
+                st.rerun()
+        finally:
+            db.close()
+else:
+    st.info("Aún no hay lotes públicos registrados.")

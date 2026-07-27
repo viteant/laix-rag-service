@@ -77,6 +77,7 @@ class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scheduled_from_run_id = Column(UUID(as_uuid=True), ForeignKey("pipeline_runs.id"), nullable=True, unique=True)
     trigger = Column(String(30), nullable=False, default="manual")
     status = Column(String(30), nullable=False, default=PipelineRunStatus.PENDING.value, index=True)
     current_phase = Column(String(30), nullable=False, default=PipelinePhase.DOWNLOAD.value)

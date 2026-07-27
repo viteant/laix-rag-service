@@ -78,7 +78,7 @@ def run_daemon(interval_seconds: int = 300, idle_interval_seconds: int = 86400):
             traceback.print_exc()
             
             error_details = traceback.format_exc()
-            subject = "Alerta Crítica: Fallo en Daemon de Ingesta"
+            subject = f"Alerta Crítica: Fallo en Daemon ({type(e).__name__})"
             body = (
                 f"<h2>Fallo en el Daemon</h2>"
                 f"<p>Se ha producido un error inesperado que interrumpió el ciclo de escaneo.</p>"

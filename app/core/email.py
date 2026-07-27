@@ -14,6 +14,30 @@ def send_alert_email(subject: str, message: str, is_html: bool = True) -> bool:
         print(f"⚠️ Alerta simulada (Falta config SMTP en .env) | {subject}:\n{message}")
         return False
 
+    import os
+    import hashlib
+    from datetime import datetime
+    
+    # ------------------ DEBOUNCE LOGIC ------------------
+    # Evitar spam: Enviar el correo solo 1 vez al día por cada Asunto único.
+    locks_dir = os.path.join(os.getenv("DATA_SOURCE_PATH", "data"), "locks")
+    os.makedirs(locks_dir, exist_ok=True)
+    
+    subject_hash = hashlib.md5(subject.encode('utf-8')).hexdigest()
+    lock_file = os.path.join(locks_dir, f"email_{subject_hash}.lock")
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    if os.path.exists(lock_file):
+        with open(lock_file, "r") as f:
+            last_sent = f.read().strip()
+        if last_sent == today_str:
+            print(f"🤫 [Debounce] Correo silenciado para hoy (ya se envió): {subject}")
+            return True # Retorna True para no romper el flujo
+            
+    with open(lock_file, "w") as f:
+        f.write(today_str)
+    # ----------------------------------------------------
+
     msg = MIMEMultipart()
     msg['From'] = settings.SMTP_FROM_EMAIL if settings.SMTP_FROM_EMAIL else settings.SMTP_USER
     msg['To'] = settings.ALERT_EMAIL_TO

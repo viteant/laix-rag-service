@@ -5,6 +5,8 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import get_db, Base, engine
+# Registrar las tablas del pipeline público en la metadata antes del arranque.
+from app.pipeline import models as pipeline_models
 from app.api.jurisprudence_router import router as jurisprudence_router
 from app.api.admin_router import router as admin_router
 

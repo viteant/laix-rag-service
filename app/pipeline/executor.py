@@ -11,6 +11,7 @@ from app.pipeline.rag_loader import RagTxtLoader
 from app.pipeline.registro_classifier import RegistroOficialClassifier
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.storage_pressure import StoragePressureMonitor
+from app.pipeline.logging_context import asset_log_context
 from app.pipeline.transform import TransformService
 
 
@@ -56,6 +57,7 @@ class PublicPipelineExecutor:
             if run_asset.status != required_status:
                 continue
             try:
+                print(f"{self._phase_label(run.current_phase)} {asset_log_context(run_asset)}")
                 action(run_asset)
                 self.db.commit()
             except Exception as error:
@@ -70,6 +72,17 @@ class PublicPipelineExecutor:
             PipelineOrchestrator.fail(run, f"Phase {run.current_phase} failed for: {', '.join(failures)}")
             self.db.commit()
             raise BatchExecutionError(run.error_message)
+
+    @staticmethod
+    def _phase_label(phase: str) -> str:
+        return {
+            "optimize": "Optimizando",
+            "extract_text": "Extrayendo texto",
+            "classify_registro_oficial": "Clasificando",
+            "upload": "Subiendo a R2",
+            "ingest_rag": "Cargando RAG",
+            "cleanup": "Limpiando PDF local",
+        }.get(phase, phase)
 
     def _record_storage_pressure(self, run: PipelineRun, active: bool, cleaned: int = 0) -> None:
         snapshot = self.space_monitor.snapshot()
@@ -133,6 +146,7 @@ class PublicPipelineExecutor:
                 notify_pipeline_event(run, "almacenamiento recuperado", "Se reanudan las descargas del lote.")
                 continue
             try:
+                print(f"Descargando {asset_log_context(pending)}")
                 self.downloader.download(pending)
                 self.db.commit()
             except Exception as error:

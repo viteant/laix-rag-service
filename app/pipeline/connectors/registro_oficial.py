@@ -152,6 +152,7 @@ class RegistroOficialConnector:
                     folder_name = folder_titles[0].strip() if folder_titles else "sin título"
                     year = folder_year(folder)
                     try:
+                        print(folder_message("Descubriendo", self.subtype, year, folder_name))
                         title_matches = False
                         for _ in range(2):
                             folder.evaluate("element => element.click()")

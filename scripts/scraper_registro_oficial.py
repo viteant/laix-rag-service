@@ -56,8 +56,9 @@ def generate_ro_filename(titulo, fecha):
     return f"{fecha_fmt}_ro_{num}"
 
 def download_pdf(url, dest_path):
-    if dest_path.exists():
-        print(f"    ⏭️ Archivo ya existe: {dest_path.name}")
+    txt_path = dest_path.with_suffix('.txt')
+    if dest_path.exists() or txt_path.exists():
+        print(f"    ⏭️ Archivo ya existe (PDF o TXT): {dest_path.name}")
         return False
     
     print(f"    ⬇️ Descargando: {url}")

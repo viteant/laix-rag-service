@@ -88,20 +88,25 @@ def inventory_directory(base_dir: str):
 
         for root, _, files in os.walk(folder_path):
             for file in files:
-                if file.lower().endswith(".pdf"):
+                is_pdf = file.lower().endswith(".pdf")
+                is_txt = file.lower().endswith(".txt")
+                if is_pdf or is_txt:
                     found_count += 1
                     full_path = os.path.abspath(os.path.join(root, file))
                     file_size = os.path.getsize(full_path)
                     sha256 = calculate_sha256(full_path)
 
-                    # Verificar si ya existe en BD por SHA-256
                     existing = db.query(SourceDocument).filter_by(sha256=sha256).first()
                     if existing:
                         duplicate_count += 1
                         print(f"  [Duplicado] {file} (SHA256 ya registrado: {sha256[:8]}...)")
                         continue
 
-                    page_count, has_embedded_text, requires_ocr = evaluate_pdf_quality(full_path)
+                    if is_pdf:
+                        page_count, has_embedded_text, requires_ocr = evaluate_pdf_quality(full_path)
+                    else:
+                        # Si es un txt puro, no requiere OCR y asumimos 1 página de contenido
+                        page_count, has_embedded_text, requires_ocr = 1, True, False
 
                     doc_entry = SourceDocument(
                         source_type=source_type,

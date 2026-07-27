@@ -46,9 +46,12 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
         return "skipped"
 
     if not existing_doc:
-        doc = fitz.open(filepath)
-        page_count = len(doc)
-        doc.close()
+        if filepath.suffix.lower() == '.txt':
+            page_count = 1
+        else:
+            doc = fitz.open(filepath)
+            page_count = len(doc)
+            doc.close()
 
         existing_doc = SourceDocument(
             filename=filename,
@@ -71,25 +74,37 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
     try:
         doc_id = str(existing_doc.id)
 
-        # 1. Extracción y OCR (Limpiar páginas previas si force=True)
-        print("   1/6 Extrayendo páginas y realizando OCR si es necesario...")
+        # 1. Extracción y OCR (o lectura directa de TXT)
+        print("   1/6 Extrayendo texto y realizando OCR si es necesario...")
         db.query(DocumentPage).filter_by(source_document_id=existing_doc.id).delete()
         db.commit()
 
-        extractor = PDFExtractor(db)
-        extractor.extract_document(doc_id)
+        if filepath.suffix.lower() == '.txt':
+            with open(filepath, 'r', encoding='utf-8') as f:
+                raw_txt = f.read()
+            page = DocumentPage(
+                source_document_id=existing_doc.id,
+                page_number=1,
+                raw_text=raw_txt,
+                clean_text=TextCleaner.clean_text(raw_txt)
+            )
+            db.add(page)
+            db.commit()
+        else:
+            extractor = PDFExtractor(db)
+            extractor.extract_document(doc_id)
 
-        # Limpiar texto en cada página
-        pages = db.query(DocumentPage).filter_by(source_document_id=existing_doc.id).all()
-        for p in pages:
-            if p.raw_text:
-                p.clean_text = TextCleaner.clean_text(p.raw_text)
-        db.commit()
+            # Limpiar texto en cada página
+            pages = db.query(DocumentPage).filter_by(source_document_id=existing_doc.id).all()
+            for p in pages:
+                if p.raw_text:
+                    p.clean_text = TextCleaner.clean_text(p.raw_text)
+            db.commit()
 
         # 2. Construcción de texto completo
         print("   2/6 Concatenando texto completo...")
         builder = DocumentBuilder()
-        builder.build_full_document(db, doc_id)
+        full_text_path = builder.build_full_document(db, doc_id)
 
         # 3. Detección de Casos
         print("   3/6 Detectando casos jurídicos y linderos de página...")
@@ -132,6 +147,19 @@ def process_single_pdf(db: Session, filepath: pathlib.Path, force: bool = False)
         existing_doc.status = "completed"
         existing_doc.processed_at = datetime.utcnow()
         db.commit()
+        
+        # Reemplazar el archivo físico PDF por su versión en texto para liberar espacio
+        try:
+            txt_dest = filepath.with_suffix('.txt')
+            import shutil
+            shutil.copy2(full_text_path, txt_dest)
+            if filepath.suffix.lower() == '.pdf':
+                filepath.unlink(missing_ok=True)
+                print(f"🗑️ Archivo PDF original eliminado y reemplazado por TXT: {txt_dest.name}")
+            else:
+                print(f"✅ El archivo ya es un TXT, proceso finalizado: {txt_dest.name}")
+        except Exception as e:
+            print(f"⚠️ No se pudo reemplazar/actualizar el archivo {filename}: {e}")
 
         print(f"✅ Ingesta completa de {filename} realizada con éxito.")
         return "success"

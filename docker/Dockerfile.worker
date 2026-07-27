@@ -20,6 +20,10 @@ COPY pyproject.toml .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir . --extra-index-url https://download.pytorch.org/whl/cpu
 
+# Public-source discovery is executed by Celery and requires Playwright's
+# browser runtime inside the worker image.
+RUN playwright install --with-deps chromium chromium-headless-shell
+
 COPY app/ /app/app/
 COPY scripts/ /app/scripts/
 

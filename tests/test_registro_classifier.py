@@ -58,6 +58,12 @@ def test_model_aliases_are_normalized_before_closed_taxonomy_validation():
     assert normalized["entries"][0]["category"] == "TRATADO_INTERNACIONAL"
 
 
+def test_string_evidence_is_preserved_as_a_single_evidence_item():
+    normalized = normalize_model_payload({"categories": ["OTRO"], "evidence": "No hay índice."})
+
+    assert normalized["evidence"] == [{"text": "No hay índice."}]
+
+
 def test_indice_mensual_is_classified_as_other_without_llm_call():
     asset = SimpleNamespace(
         source=SimpleNamespace(source_type="registro_oficial", source_subtype="indice_mensual"),

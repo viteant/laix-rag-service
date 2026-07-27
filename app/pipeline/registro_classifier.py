@@ -118,6 +118,11 @@ def normalize_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized["categories"] = list(dict.fromkeys(
         normalized_category(category) for category in normalized.get("categories", [])
     ))
+    evidence = normalized.get("evidence", [])
+    if isinstance(evidence, str):
+        normalized["evidence"] = [{"text": evidence[:500]}]
+    elif evidence is None:
+        normalized["evidence"] = []
     normalized_entries = []
     for entry in normalized.get("entries", []):
         entry = dict(entry)

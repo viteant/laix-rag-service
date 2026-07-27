@@ -46,6 +46,8 @@ data/processed/*
 !data/processed/.gitkeep
 data/temporary/*
 !data/temporary/.gitkeep
+data/work/
+data/text/
 
 # Persistent Database & Storage volumes
 postgres_data/

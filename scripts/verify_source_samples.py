@@ -1,4 +1,4 @@
-"""Smoke-test one real local PDF per configured public-source folder."""
+"""Smoke-test source PDFs without renaming or modifying their original files."""
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -28,11 +28,13 @@ def verify(root: Path = Path("data/source")) -> int:
     with TemporaryDirectory(prefix="laix-source-smoke-") as temporary:
         temporary_root = Path(temporary)
         for source_type, subtype, pdf_path in samples(root):
+            # Manual/source-provided files retain their exact original name.
+            original_filename = pdf_path.name
             source = SimpleNamespace(source_type=source_type, source_subtype=subtype)
             asset = SimpleNamespace(
                 downloaded_pdf_path=str(pdf_path), optimized_pdf_path=None, optimized_sha256=None,
                 local_txt_path=None, status=None, error_message=None,
-                canonical_filename=pdf_path.name, source=source,
+                canonical_filename=original_filename, source=source,
             )
             run_asset = SimpleNamespace(
                 asset=asset, pipeline_run_id="source-smoke", status=None, detail=None,

@@ -123,6 +123,7 @@ class RegistroOficialConnector:
         self,
         should_continue: Callable[[], bool] | None = None,
         on_progress: Callable[[int], None] | None = None,
+        max_assets: int | None = None,
     ) -> list[DiscoveredAsset]:
         discovered: list[DiscoveredAsset] = []
         with sync_playwright() as playwright:
@@ -151,6 +152,8 @@ class RegistroOficialConnector:
                             href = card.locator("a.cta_post_imagen").get_attribute("href")
                             if href and dates:
                                 discovered.append(registro_oficial_asset(title, dates[0].strip(), self.subtype, urljoin(self.base_url, href)))
+                                if max_assets and len(discovered) >= max_assets:
+                                    return discovered
                         pagination = page.locator("ul.k-pagination__pages a.button-post-imagen-link")
                         next_link = pagination.filter(has_text="»")
                         if not next_link.count():

@@ -21,7 +21,7 @@ class PublicPipelineExecutor:
         self.db = db
         self.downloader = downloader or DownloadService(db)
         self.transformer = transformer or TransformService(db)
-        self.storage = storage or R2StorageService(db)
+        self.storage = storage
         self.rag_loader = rag_loader or RagTxtLoader(db)
 
     def _ensure_running(self, run: PipelineRun) -> None:
@@ -70,7 +70,10 @@ class PublicPipelineExecutor:
             PipelinePhase.DOWNLOAD.value: (PipelineAssetStatus.DISCOVERED.value, self.downloader.download),
             PipelinePhase.OPTIMIZE.value: (PipelineAssetStatus.DOWNLOADED.value, self.transformer.optimize),
             PipelinePhase.EXTRACT_TEXT.value: (PipelineAssetStatus.OPTIMIZED.value, self.transformer.extract_text),
-            PipelinePhase.UPLOAD.value: (PipelineAssetStatus.TEXT_READY.value, self.storage.upload_and_verify),
+            PipelinePhase.UPLOAD.value: (
+                PipelineAssetStatus.TEXT_READY.value,
+                (self.storage or R2StorageService(self.db)).upload_and_verify,
+            ),
             PipelinePhase.INGEST_RAG.value: (PipelineAssetStatus.VERIFIED.value, self.rag_loader.load),
             PipelinePhase.CLEANUP.value: (PipelineAssetStatus.INGESTED.value, self.cleanup_local_pdfs),
         }

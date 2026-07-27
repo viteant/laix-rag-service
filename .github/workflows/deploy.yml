@@ -74,6 +74,18 @@ jobs:
         env:
           ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
         run: |
+          if [ -z "$ENV_FILE_CONTENT" ]; then
+            echo "::error::ENV_FILE_CONTENT is missing or empty."
+            exit 1
+          fi
+
+          for required_key in POSTGRES_PASSWORD SERVICE_API_TOKEN; do
+            if ! printf '%s\n' "$ENV_FILE_CONTENT" | grep -Eq "^${required_key}=.+$"; then
+              echo "::error::ENV_FILE_CONTENT must define a non-empty ${required_key}."
+              exit 1
+            fi
+          done
+
           ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} "ENV_CONTENT=\$(cat << 'EOFENV'
           ${ENV_FILE_CONTENT}
           EOFENV

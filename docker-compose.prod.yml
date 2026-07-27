@@ -16,7 +16,7 @@ services:
     container_name: laix_rag_postgres_prod
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_pass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in the production .env file}
       POSTGRES_DB: ${POSTGRES_DB:-laix_rag}
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
@@ -45,10 +45,10 @@ services:
     env_file: .env
     environment:
       - ENVIRONMENT=production
-      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in the production .env file}@postgres:5432/${POSTGRES_DB:-laix_rag}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
+      - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:?SERVICE_API_TOKEN must be set in the production .env file}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
       - HF_HOME=/root/.cache/huggingface
     volumes:
@@ -72,7 +72,7 @@ services:
     container_name: laix_rag_dashboard_prod
     env_file: .env
     environment:
-      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in the production .env file}@postgres:5432/${POSTGRES_DB:-laix_rag}
     ports:
       - "8501:8501"
     command: ["streamlit", "run", "app/dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
@@ -92,10 +92,10 @@ services:
     env_file: .env
     environment:
       - ENVIRONMENT=production
-      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in the production .env file}@postgres:5432/${POSTGRES_DB:-laix_rag}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
+      - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:?SERVICE_API_TOKEN must be set in the production .env file}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
       - HF_HOME=/root/.cache/huggingface
     volumes:
@@ -121,10 +121,10 @@ services:
     env_file: .env
     environment:
       - ENVIRONMENT=production
-      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in the production .env file}@postgres:5432/${POSTGRES_DB:-laix_rag}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:-dev_secret_token_laix_rag_2026}
+      - SERVICE_API_TOKEN=${SERVICE_API_TOKEN:?SERVICE_API_TOKEN must be set in the production .env file}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
       - HF_HOME=/root/.cache/huggingface
     volumes:

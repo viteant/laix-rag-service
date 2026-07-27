@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     LLM_CLASSIFIER_MAX_INPUT_CHARS: int = 18000
     LLM_CLASSIFIER_PROMPT_VERSION: str = "registro-oficial-v1"
 
+    # Emergency disk-space relief for the public-source batch.
+    PIPELINE_STORAGE_PATH: str = "/app/data"
+    PIPELINE_MIN_FREE_SPACE_PERCENT: float = 20
+    PIPELINE_RESUME_FREE_SPACE_PERCENT: float = 25
+
     # Cloudflare R2 (S3-compatible API)
     R2_ENDPOINT_URL: str = ""
     R2_ACCESS_KEY_ID: str = ""

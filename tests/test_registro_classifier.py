@@ -9,6 +9,7 @@ from app.pipeline.registro_classifier import (
     RegistroOficialClassifier,
     categories_for_page_range,
     index_excerpt,
+    normalize_model_payload,
 )
 
 
@@ -43,6 +44,18 @@ def test_page_ranges_select_only_the_category_that_applies_to_chunk():
     assert categories_for_page_range(classification, 4, 4) == ["LEY_ORGANICA"]
     assert categories_for_page_range(classification, 8, 9) == ["RESOLUCION"]
     assert categories_for_page_range(classification, 20, 20) == ["LEY_ORGANICA", "RESOLUCION"]
+
+
+def test_model_aliases_are_normalized_before_closed_taxonomy_validation():
+    normalized = normalize_model_payload({
+        "primary_category": "instrumento internacional",
+        "categories": ["INSTRUMENTO_INTERNACIONAL", "RESOLUCION", "RESOLUCION"],
+        "entries": [{"category": "Tratado", "title": "Convenio", "page_start": 3}],
+    })
+
+    assert normalized["primary_category"] == "TRATADO_INTERNACIONAL"
+    assert normalized["categories"] == ["TRATADO_INTERNACIONAL", "RESOLUCION"]
+    assert normalized["entries"][0]["category"] == "TRATADO_INTERNACIONAL"
 
 
 def test_indice_mensual_is_classified_as_other_without_llm_call():

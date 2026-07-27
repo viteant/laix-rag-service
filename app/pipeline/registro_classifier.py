@@ -18,6 +18,12 @@ LEGAL_CATEGORIES = frozenset({
     "ORDENANZA", "CIRCULAR", "INSTRUCTIVO", "NORMA_TECNICA", "TRATADO_INTERNACIONAL",
     "FE_DE_ERRATAS", "AVISO", "OTRO",
 })
+CATEGORY_ALIASES = {
+    "INSTRUMENTO_INTERNACIONAL": "TRATADO_INTERNACIONAL",
+    "TRATADO": "TRATADO_INTERNACIONAL",
+    "FE_DE_ERRORES": "FE_DE_ERRATAS",
+    "DECRETO": "DECRETO_EJECUTIVO",
+}
 INDEX_MARKERS = ("ÍNDICE", "INDICE", "SUMARIO", "CONTENIDO")
 
 
@@ -97,6 +103,28 @@ def categories_for_page_range(classification: dict[str, Any], page_start: int, p
         and (entry.get("page_end") or entry["page_start"]) >= page_start
     }
     return sorted(matches) or list(classification.get("categories") or ["OTRO"])
+
+
+def normalize_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Map unambiguous provider/model aliases to the product's closed taxonomy."""
+    def normalized_category(value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        key = re.sub(r"[^A-Z0-9]+", "_", value.upper()).strip("_")
+        return CATEGORY_ALIASES.get(key, key)
+
+    normalized = dict(payload)
+    normalized["primary_category"] = normalized_category(normalized.get("primary_category"))
+    normalized["categories"] = list(dict.fromkeys(
+        normalized_category(category) for category in normalized.get("categories", [])
+    ))
+    normalized_entries = []
+    for entry in normalized.get("entries", []):
+        entry = dict(entry)
+        entry["category"] = normalized_category(entry.get("category"))
+        normalized_entries.append(entry)
+    normalized["entries"] = normalized_entries
+    return normalized
 
 
 class RegistroOficialClassifier:
@@ -182,7 +210,7 @@ class RegistroOficialClassifier:
                 content = Path(asset.local_txt_path).read_text(encoding="utf-8")
                 excerpt, input_pages, has_index = index_excerpt(content, settings.LLM_CLASSIFIER_MAX_INDEX_PAGES, settings.LLM_CLASSIFIER_MAX_INPUT_CHARS)
                 raw = self._request(self._prompt(excerpt, has_index))
-                parsed = ClassificationResult.model_validate(json.loads(raw))
+                parsed = ClassificationResult.model_validate(normalize_model_payload(json.loads(raw)))
                 classification = {"status": "classified", "method": "llm", **parsed.model_dump(),
                                   "provider": settings.LLM_CLASSIFIER_PROVIDER, "model": settings.LLM_CLASSIFIER_MODEL,
                                   "prompt_version": settings.LLM_CLASSIFIER_PROMPT_VERSION, "input_pages": input_pages,

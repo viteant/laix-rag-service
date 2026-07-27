@@ -18,6 +18,12 @@ ni reinicia el VPS.
 4. Revisa el inventario y usa Pausar/Cancelar si es necesario.
 5. Para una prueba de humo, selecciona un único activo y ejecuta las fases de forma controlada. No habilites descarga masiva hasta que R2, SMTP y embeddings estén verificados.
 
+Para validar los PDFs locales de ejemplo sin descargar ni subir archivos, ejecuta:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T api python scripts/verify_source_samples.py
+```
+
 ## Scheduler relativo
 
 El servicio `laix-public-pipeline.service` consulta cada minuto. Solo crea y encola

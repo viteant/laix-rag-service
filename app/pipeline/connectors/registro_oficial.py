@@ -155,8 +155,8 @@ class RegistroOficialConnector:
                         next_link = pagination.filter(has_text="»")
                         if not next_link.count():
                             break
-                        next_link.first.click()
                         try:
+                            next_link.first.evaluate("element => element.click()")
                             page.wait_for_function(
                                 "previousHref => document.querySelector('.card__item_post_imagen a.cta_post_imagen')?.getAttribute('href') !== previousHref",
                                 arg=first_href,

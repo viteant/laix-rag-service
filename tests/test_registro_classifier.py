@@ -8,6 +8,7 @@ from app.pipeline.registro_classifier import (
     ClassificationResult,
     RegistroOficialClassifier,
     categories_for_page_range,
+    complete_entry_page_ranges,
     index_excerpt,
     normalize_model_payload,
 )
@@ -62,6 +63,21 @@ def test_string_evidence_is_preserved_as_a_single_evidence_item():
     normalized = normalize_model_payload({"categories": ["OTRO"], "evidence": "No hay índice."})
 
     assert normalized["evidence"] == [{"text": "No hay índice."}]
+
+
+def test_index_starts_are_expanded_until_the_next_entry():
+    result = ClassificationResult.model_validate({
+        "has_index": True, "primary_category": "ACUERDO", "categories": ["ACUERDO", "RESOLUCION"],
+        "confidence": 0.9,
+        "entries": [
+            {"category": "ACUERDO", "title": "Acuerdo", "page_start": 3, "page_end": 3},
+            {"category": "RESOLUCION", "title": "Resolución", "page_start": 10, "page_end": 10},
+        ],
+    })
+
+    complete_entry_page_ranges(result, total_pages=14)
+
+    assert [(entry.page_start, entry.page_end) for entry in result.entries] == [(3, 9), (10, 14)]
 
 
 def test_indice_mensual_is_classified_as_other_without_llm_call():

@@ -105,6 +105,17 @@ def categories_for_page_range(classification: dict[str, Any], page_start: int, p
     return sorted(matches) or list(classification.get("categories") or ["OTRO"])
 
 
+def complete_entry_page_ranges(result: ClassificationResult, total_pages: int) -> ClassificationResult:
+    """Infer end pages from the ordered index when the model only provides starts."""
+    ordered = sorted((entry for entry in result.entries if entry.page_start is not None), key=lambda entry: entry.page_start)
+    for index, entry in enumerate(ordered):
+        next_start = ordered[index + 1].page_start if index + 1 < len(ordered) else total_pages + 1
+        inferred_end = max(entry.page_start or 1, next_start - 1)
+        if entry.page_end is None or entry.page_end <= entry.page_start:
+            entry.page_end = inferred_end
+    return result
+
+
 def normalize_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Map unambiguous provider/model aliases to the product's closed taxonomy."""
     def normalized_category(value: Any) -> Any:
@@ -216,6 +227,8 @@ class RegistroOficialClassifier:
                 excerpt, input_pages, has_index = index_excerpt(content, settings.LLM_CLASSIFIER_MAX_INDEX_PAGES, settings.LLM_CLASSIFIER_MAX_INPUT_CHARS)
                 raw = self._request(self._prompt(excerpt, has_index))
                 parsed = ClassificationResult.model_validate(normalize_model_payload(json.loads(raw)))
+                total_pages = max((page for page, _ in pages_from_txt(content)), default=1)
+                parsed = complete_entry_page_ranges(parsed, total_pages)
                 classification = {"status": "classified", "method": "llm", **parsed.model_dump(),
                                   "provider": settings.LLM_CLASSIFIER_PROVIDER, "model": settings.LLM_CLASSIFIER_MODEL,
                                   "prompt_version": settings.LLM_CLASSIFIER_PROMPT_VERSION, "input_pages": input_pages,

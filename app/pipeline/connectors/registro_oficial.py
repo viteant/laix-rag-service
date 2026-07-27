@@ -45,6 +45,10 @@ REGISTRO_OFICIAL_SECTIONS = {
 }
 
 
+def folder_failure_message(subtype: str, folder_name: str) -> str:
+    return f"Fail [{subtype} - {folder_name or 'sin título'}]"
+
+
 def _normalized(value: str) -> str:
     return unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii").lower()
 
@@ -136,37 +140,47 @@ class RegistroOficialConnector:
                 for index in range(folders.count()):
                     if should_continue and not should_continue():
                         break
-                    folders.nth(index).evaluate("element => element.click()")
-                    page.wait_for_selector("#child-post-imagen", timeout=15000, state="attached")
-                    seen_pages: set[str] = set()
-                    while True:
-                        cards = page.locator(".card__item_post_imagen")
-                        first_href = cards.nth(0).locator("a.cta_post_imagen").get_attribute("href") if cards.count() else None
-                        if not first_href or first_href in seen_pages:
-                            break
-                        seen_pages.add(first_href)
-                        for card_index in range(cards.count()):
-                            card = cards.nth(card_index)
-                            title = card.locator("h4.card__title_numero_imagen").inner_text().strip()
-                            dates = card.locator("p.txt_fecha_post_imagen").all_inner_texts()
-                            href = card.locator("a.cta_post_imagen").get_attribute("href")
-                            if href and dates:
-                                discovered.append(registro_oficial_asset(title, dates[0].strip(), self.subtype, urljoin(self.base_url, href)))
+                    folder = folders.nth(index)
+                    folder_titles = folder.all_inner_texts()
+                    folder_name = folder_titles[0].strip() if folder_titles else "sin título"
+                    try:
+                        folder.evaluate("element => element.click()")
+                        page.wait_for_function(
+                            "() => document.querySelectorAll('#child-post-imagen .card__item_post_imagen').length > 0",
+                            timeout=15000,
+                        )
+                        seen_pages: set[str] = set()
+                        while True:
+                            cards = page.locator(".card__item_post_imagen")
+                            first_href = cards.nth(0).locator("a.cta_post_imagen").get_attribute("href") if cards.count() else None
+                            if not first_href or first_href in seen_pages:
+                                break
+                            seen_pages.add(first_href)
+                            for card_index in range(cards.count()):
+                                card = cards.nth(card_index)
+                                titles = card.locator("h4.card__title_numero_imagen").all_inner_texts()
+                                dates = card.locator("p.txt_fecha_post_imagen").all_inner_texts()
+                                href = card.locator("a.cta_post_imagen").get_attribute("href")
+                                if not href or not dates or not titles:
+                                    print(f"{folder_failure_message(self.subtype, folder_name)}: tarjeta incompleta")
+                                    continue
+                                discovered.append(registro_oficial_asset(titles[0].strip(), dates[0].strip(), self.subtype, urljoin(self.base_url, href)))
                                 if max_assets and len(discovered) >= max_assets:
                                     return discovered
-                        pagination = page.locator("ul.k-pagination__pages a.button-post-imagen-link")
-                        next_link = pagination.filter(has_text="»")
-                        if not next_link.count():
-                            break
-                        try:
-                            next_link.first.evaluate("element => element.click()")
-                            page.wait_for_function(
-                                "previousHref => document.querySelector('.card__item_post_imagen a.cta_post_imagen')?.getAttribute('href') !== previousHref",
-                                arg=first_href,
-                                timeout=5000,
-                            )
-                        except PlaywrightTimeoutError:
-                            break
+                            pagination = page.locator("ul.k-pagination__pages a.button-post-imagen-link")
+                            next_link = pagination.filter(has_text="»")
+                            if not next_link.count():
+                                break
+                            try:
+                                next_link.first.evaluate("element => element.click()")
+                                page.wait_for_function(
+                                    "previousHref => document.querySelector('.card__item_post_imagen a.cta_post_imagen')?.getAttribute('href') !== previousHref",
+                                    arg=first_href, timeout=5000,
+                                )
+                            except PlaywrightTimeoutError:
+                                break
+                    except (PlaywrightTimeoutError, ValueError) as error:
+                        print(f"{folder_failure_message(self.subtype, folder_name)}: {error}")
                     if on_progress:
                         on_progress(index + 1)
             except PlaywrightTimeoutError as error:

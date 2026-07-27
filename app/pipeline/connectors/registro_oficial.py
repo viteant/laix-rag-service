@@ -130,8 +130,13 @@ class RegistroOficialConnector:
                 for index in range(folders.count()):
                     folders.nth(index).evaluate("element => element.click()")
                     page.wait_for_selector("#child-post-imagen", timeout=15000, state="attached")
+                    seen_pages: set[str] = set()
                     while True:
                         cards = page.locator(".card__item_post_imagen")
+                        first_href = cards.nth(0).locator("a.cta_post_imagen").get_attribute("href") if cards.count() else None
+                        if not first_href or first_href in seen_pages:
+                            break
+                        seen_pages.add(first_href)
                         for card_index in range(cards.count()):
                             card = cards.nth(card_index)
                             title = card.locator("h4.card__title_numero_imagen").inner_text().strip()
@@ -140,12 +145,18 @@ class RegistroOficialConnector:
                             if href and dates:
                                 discovered.append(registro_oficial_asset(title, dates[0].strip(), self.subtype, urljoin(self.base_url, href)))
                         pagination = page.locator("ul.k-pagination__pages a.button-post-imagen-link")
-                        current = page.locator("ul.k-pagination__pages a.active").inner_text() if page.locator("ul.k-pagination__pages a.active").count() else "1"
-                        next_link = pagination.filter(has_text=str(int(current) + 1))
+                        next_link = pagination.filter(has_text="»")
                         if not next_link.count():
                             break
-                        next_link.first.evaluate("element => element.click()")
-                        page.wait_for_timeout(500)
+                        next_link.first.click()
+                        try:
+                            page.wait_for_function(
+                                "previousHref => document.querySelector('.card__item_post_imagen a.cta_post_imagen')?.getAttribute('href') !== previousHref",
+                                arg=first_href,
+                                timeout=5000,
+                            )
+                        except PlaywrightTimeoutError:
+                            break
             except PlaywrightTimeoutError as error:
                 raise RuntimeError(f"Registro Oficial layout unavailable for {self.subtype}") from error
             finally:

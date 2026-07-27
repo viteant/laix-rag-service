@@ -6,6 +6,17 @@ on:
       - main
       - master
 
+# The workflow only reads repository contents. Production credentials are read
+# directly from GitHub Actions secrets by the deployment job.
+permissions:
+  contents: read
+
+# Never deploy two revisions to the same VPS concurrently. A later push waits
+# for the active deployment instead of interrupting it halfway through.
+concurrency:
+  group: laix-rag-production
+  cancel-in-progress: false
+
 jobs:
   test:
     name: Run deterministic tests
@@ -48,10 +59,12 @@ jobs:
           # 1. Crear directorio remoto si no existe
           ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} "sudo mkdir -p /opt/laix-rag && sudo chown -R \$USER:\$USER /opt/laix-rag"
 
-          # 2. Transferir archivos del repositorio directamente al VPS vía Rsync (Ignorando data/)
-          rsync -avz -e "ssh -p ${{ secrets.VPS_PORT }}" \
+          # 2. Sincronizar un espejo del repositorio. Las exclusiones conservan
+          # los datos, secretos y volúmenes persistentes que existen en el VPS.
+          rsync -avz --delete-delay -e "ssh -p ${{ secrets.VPS_PORT }}" \
             --exclude='.git' \
             --exclude='.github' \
+            --exclude='.env' \
             --exclude='.venv' \
             --exclude='data' \
             --exclude='postgres_data*' \
@@ -76,6 +89,7 @@ jobs:
             fi
 
             # El scraper se ejecuta en el worker Docker; no se instala Python ni Playwright en el host.
+            # El scheduler se activa después de que los contenedores estén disponibles.
             echo "⏱️ Instalando scheduler relativo del pipeline público..."
             SUDO=""
             if [ "$(id -u)" -ne 0 ]; then
@@ -83,7 +97,7 @@ jobs:
             fi
             $SUDO install -D -m 644 deploy/systemd/laix-public-pipeline.service /etc/systemd/system/laix-public-pipeline.service
             $SUDO systemctl daemon-reload
-            $SUDO systemctl enable --now laix-public-pipeline.service
+            $SUDO systemctl enable laix-public-pipeline.service
 
             # 2. Determinar comando docker compose y permisos
             SUDO=""
@@ -103,6 +117,9 @@ jobs:
             
             echo "🐳 Levantando contenedores..."
             $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d
+
+            echo "⏱️ Iniciando scheduler relativo del pipeline público..."
+            $SUDO systemctl restart laix-public-pipeline.service
 
             # Forzar reinicio de Nginx para evitar que cachee la IP antigua del contenedor de la API
             echo "🔄 Reiniciando proxy Nginx..."

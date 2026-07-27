@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/opt/laix-rag
 # The API container shares the Docker network where PostgreSQL is reachable as `postgres`.
-ExecStart=/usr/bin/docker compose -f /opt/laix-rag/docker-compose.prod.yml exec -T api python scripts/trigger_public_pipeline.py
+# Supports both Docker Compose v2 (docker compose) and legacy docker-compose.
+ExecStart=/bin/sh -lc 'cd /opt/laix-rag && if command -v docker-compose >/dev/null 2>&1; then exec docker-compose -f docker-compose.prod.yml exec -T api python scripts/trigger_public_pipeline.py; else exec docker compose -f docker-compose.prod.yml exec -T api python scripts/trigger_public_pipeline.py; fi'
 Restart=always
 RestartSec=60

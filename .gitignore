@@ -5,10 +5,11 @@ __pycache__/
 *.so
 .Python
 
-# Virtual Environment
-venv/
-.venv/
+# Virtual Environments
+.env
+.venv
 env/
+venv/
 ENV/
 build/
 develop-eggs/

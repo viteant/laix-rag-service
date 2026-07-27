@@ -65,6 +65,24 @@ services:
         limits:
           memory: 3000M
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: laix_rag_dashboard_prod
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-laix_rag}
+    ports:
+      - "8501:8501"
+    command: ["streamlit", "run", "app/dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    volumes:
+      - ./app:/app/app
+      - ./data:/app/data
+    depends_on:
+      - postgres
+    restart: always
+
   worker:
     build:
       context: .

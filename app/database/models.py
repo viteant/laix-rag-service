@@ -26,6 +26,7 @@ class ApiClient(Base):
 class SourceType(str, enum.Enum):
     DOCUMENT = "document"
     JURISPRUDENCE = "jurisprudence"
+    LEGISLATION = "legislation"
 
 
 class DocumentStatus(str, enum.Enum):

@@ -73,6 +73,12 @@ def inventory_directory(base_dir: str):
         os.path.join(base_dir, "documentos"): SourceType.DOCUMENT.value,
         os.path.join(base_dir, "jurisprudencia"): SourceType.JURISPRUDENCE.value,
         os.path.join(base_dir, "jurisprudencias"): SourceType.JURISPRUDENCE.value,
+        os.path.join(base_dir, "registro_oficial"): SourceType.LEGISLATION.value,
+        os.path.join(base_dir, "suplementos"): SourceType.LEGISLATION.value,
+        os.path.join(base_dir, "edicion_especial"): SourceType.LEGISLATION.value,
+        os.path.join(base_dir, "edicion_constitucional"): SourceType.LEGISLATION.value,
+        os.path.join(base_dir, "edicion_juridica"): SourceType.LEGISLATION.value,
+        os.path.join(base_dir, "indice_mensual"): SourceType.LEGISLATION.value,
     }
 
     for folder_path, source_type in source_folders.items():

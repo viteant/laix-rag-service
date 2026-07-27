@@ -50,7 +50,7 @@ def _normalized(value: str) -> str:
 
 def parse_spanish_date(value: str) -> date:
     normalized = _normalized(value)
-    match = re.search(r"(\d{1,2})\D+([a-z]+)\D+(\d{4})", normalized)
+    match = re.search(r"\b(\d{1,2})\s+(?:de\s+)?([a-z]+)(?:\s+de)?\s+(\d{4})\b", normalized)
     if not match:
         raise ValueError(f"Unsupported Registro Oficial date: {value!r}")
     day, month_name, year = match.groups()

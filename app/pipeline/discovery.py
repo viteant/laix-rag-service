@@ -49,5 +49,8 @@ class DiscoveryService:
                 detail=None if created or not already_available else "Known asset already has verified storage or text",
             )
             self.db.add(run_asset)
+            # Discovery pages can contain duplicate cards. Flush now so the
+            # unique (run, asset) pair is visible before the next card.
+            self.db.flush()
 
         return asset, created

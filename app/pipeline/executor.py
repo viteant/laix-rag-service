@@ -17,6 +17,7 @@ from app.pipeline.registro_classifier import RegistroOficialClassifier
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.storage_pressure import StoragePressureMonitor
 from app.pipeline.logging_context import asset_log_context
+from app.pipeline.runtime_metrics import worker_runtime_snapshot
 from app.pipeline.transform import TransformService
 
 
@@ -125,6 +126,20 @@ class PublicPipelineExecutor:
             "free_bytes": snapshot.free_bytes, "cleaned_pdfs": cleaned,
         }
         run.summary = summary
+
+    def _record_runtime_metrics(self, run: PipelineRun) -> None:
+        """Expose a fresh worker heartbeat to the dashboard through the run."""
+        snapshot = self.space_monitor.snapshot()
+        self.db.refresh(run)
+        summary = dict(run.summary or {})
+        summary["runtime"] = {
+            **worker_runtime_snapshot(),
+            "data_total_bytes": snapshot.total_bytes,
+            "data_free_bytes": snapshot.free_bytes,
+            "data_free_percent": round(snapshot.free_percent, 2),
+        }
+        run.summary = summary
+        self.db.commit()
 
     def _relieve_storage_pressure(self, run: PipelineRun) -> bool:
         """Free only verified PDFs; TXT stays local and RAG remains deferred."""
@@ -266,10 +281,16 @@ class PublicPipelineExecutor:
             )][:max(1, settings.PIPELINE_PROCESS_CONCURRENCY)]
             if not candidates:
                 return
+            self._record_runtime_metrics(run)
             jobs = [celery_app.send_task("app.tasks.pipeline_tasks.process_scope_asset_task", args=[str(run.id), str(asset_id)]) for asset_id in candidates]
+            last_heartbeat = time.monotonic()
             while not all(job.ready() for job in jobs):
                 self._ensure_running(run)
+                if time.monotonic() - last_heartbeat >= 5:
+                    self._record_runtime_metrics(run)
+                    last_heartbeat = time.monotonic()
                 time.sleep(0.5)
+            self._record_runtime_metrics(run)
 
     @classmethod
     def _process_scope_asset(cls, run_id, asset_id) -> None:

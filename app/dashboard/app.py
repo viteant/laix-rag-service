@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.pipeline.models import PipelineRun
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
-from app.tasks.pipeline_tasks import discover_public_sources_task, execute_public_pipeline_task, execute_staged_public_pipeline_task
+from app.tasks.pipeline_tasks import execute_staged_public_pipeline_task
 
 load_dotenv()
 
@@ -143,65 +143,77 @@ display_status_df = pipeline_status_df if has_pipeline_assets else status_df
 display_type_df = pipeline_type_df if has_pipeline_assets else type_df
 display_recent_df = pipeline_recent_df if has_pipeline_assets else recent_df
 
-# Métricas Top
-col1, col2, col3, col4 = st.columns(4)
-total_docs = display_status_df["count"].sum() if not display_status_df.empty else 0
-ready_statuses = {"completed", "verified", "ingested", "cleaned"}
-completed_docs = display_status_df[display_status_df["status"].isin(ready_statuses)]["count"].sum() if not display_status_df.empty else 0
+pipeline_tab, rag_tab, resources_tab = st.tabs(["Pipeline", "RAG", "Recursos"])
 
-col1.metric("Activos del lote" if has_pipeline_assets else "Total Documentos", int(total_docs))
-col2.metric("Verificados / completados", int(completed_docs))
-col3.metric("Casos Jurídicos Detectados", int(cases_total))
-col4.metric("Chunks Generados (Vectores)", int(chunks_total))
+with pipeline_tab:
+    col1, col2 = st.columns(2)
+    total_docs = display_status_df["count"].sum() if not display_status_df.empty else 0
+    ready_statuses = {"completed", "verified", "ingested", "cleaned"}
+    completed_docs = display_status_df[display_status_df["status"].isin(ready_statuses)]["count"].sum() if not display_status_df.empty else 0
+    col1.metric("Activos del lote" if has_pipeline_assets else "Total Documentos", int(total_docs))
+    col2.metric("Verificados / completados", int(completed_docs))
+    if pipeline_run:
+        st.caption(f"Lote mostrado: {pipeline_run['id']} · estado {pipeline_run['estado']} · fase {pipeline_run['fase']}")
+        pressure = pipeline_run["summary"].get("storage_pressure", {})
+        if pressure:
+            free_percent = float(pressure.get("free_percent", 0))
+            recovery_target = settings.PIPELINE_RESUME_FREE_SPACE_PERCENT
+            space_col, progress_col = st.columns([1, 3])
+            space_col.metric("Espacio libre del pool", f"{free_percent:.1f}%")
+            progress_col.progress(min(free_percent / recovery_target, 1.0), text=f"Recuperación de disco: {free_percent:.1f}% / {recovery_target:.0f}% · PDFs liberados: {pressure.get('cleaned_pdfs', 0)}")
 
-if pipeline_run:
-    st.caption(f"Lote mostrado: {pipeline_run['id']} · estado {pipeline_run['estado']} · fase {pipeline_run['fase']}")
-    pressure = pipeline_run["summary"].get("storage_pressure", {})
-    if pressure:
-        free_percent = float(pressure.get("free_percent", 0))
-        recovery_target = settings.PIPELINE_RESUME_FREE_SPACE_PERCENT
-        space_col, progress_col = st.columns([1, 3])
-        space_col.metric("Espacio libre del pool", f"{free_percent:.1f}%")
-        progress_col.progress(min(free_percent / recovery_target, 1.0), text=f"Recuperación de disco: {free_percent:.1f}% / {recovery_target:.0f}% · PDFs liberados: {pressure.get('cleaned_pdfs', 0)}")
+    col_chart1, col_chart2 = st.columns(2)
+    with col_chart1:
+        st.subheader("Estado de Procesamiento")
+        if not display_status_df.empty:
+            fig_status = px.pie(display_status_df, values='count', names='status', color='status', color_discrete_map={'completed':'green', 'verified':'green', 'ingested':'green', 'cleaned':'green', 'classified':'blue', 'text_ready':'blue', 'optimized':'orange', 'downloaded':'orange', 'discovered':'gray', 'failed':'red', 'skipped':'red'})
+            st.plotly_chart(fig_status, use_container_width=True)
+        else:
+            st.info("No hay datos suficientes para mostrar.")
+    with col_chart2:
+        st.subheader("Tipos de Documentos")
+        if not display_type_df.empty:
+            st.plotly_chart(px.bar(display_type_df, x='source_type', y='count', color='source_type'), use_container_width=True)
+        else:
+            st.info("No hay datos suficientes para mostrar.")
 
-st.markdown("---")
-
-# Gráficos
-col_chart1, col_chart2 = st.columns(2)
-
-with col_chart1:
-    st.subheader("Estado de Procesamiento")
-    if not display_status_df.empty:
-        fig_status = px.pie(display_status_df, values='count', names='status', color='status',
-                            color_discrete_map={'completed':'green', 'verified':'green', 'ingested':'green', 'cleaned':'green', 'classified':'blue', 'text_ready':'blue', 'optimized':'orange', 'downloaded':'orange', 'discovered':'gray', 'failed':'red', 'skipped':'red'})
-        st.plotly_chart(fig_status, use_container_width=True)
+    st.subheader("Últimos Activos del Pipeline" if has_pipeline_assets else "Últimos Documentos Procesados")
+    if not display_recent_df.empty:
+        st.dataframe(display_recent_df, use_container_width=True, hide_index=True)
     else:
-        st.info("No hay datos suficientes para mostrar.")
+        st.info("No se encontraron activos del pipeline ni documentos en la base de datos.")
+    if st.button("🔄 Refrescar Datos"):
+        st.cache_data.clear()
+        st.rerun()
 
-with col_chart2:
-    st.subheader("Tipos de Documentos")
-    if not display_type_df.empty:
-        fig_type = px.bar(display_type_df, x='source_type', y='count', color='source_type')
-        st.plotly_chart(fig_type, use_container_width=True)
+with rag_tab:
+    rag_col1, rag_col2, rag_col3 = st.columns(3)
+    rag_col1.metric("Documentos indexados", int(status_df["count"].sum()) if not status_df.empty else 0)
+    rag_col2.metric("Casos jurídicos detectados", int(cases_total))
+    rag_col3.metric("Chunks generados (vectores)", int(chunks_total))
+    st.subheader("Estado del RAG")
+    if not status_df.empty:
+        st.plotly_chart(px.pie(status_df, values="count", names="status", color="status"), use_container_width=True)
     else:
-        st.info("No hay datos suficientes para mostrar.")
+        st.info("El RAG se ejecutará cuando todos los TXT del lote estén listos.")
 
-st.markdown("---")
-
-# Tabla Reciente
-st.subheader("Últimos Activos del Pipeline" if has_pipeline_assets else "Últimos Documentos Procesados")
-if not display_recent_df.empty:
-    st.dataframe(display_recent_df, use_container_width=True, hide_index=True)
-else:
-    st.info("No se encontraron activos del pipeline ni documentos en la base de datos.")
-
-if st.button("🔄 Refrescar Datos"):
-    st.cache_data.clear()
-    st.rerun()
-
-
-st.markdown("---")
-st.subheader("Pipeline de fuentes públicas")
+with resources_tab:
+    st.subheader("Recursos del worker")
+    runtime = (pipeline_run or {}).get("summary", {}).get("runtime", {})
+    if runtime:
+        def gib(value):
+            return f"{value / 1024 ** 3:.2f} GB" if value is not None else "Sin límite"
+        memory = gib(runtime.get("memory_bytes"))
+        limit = runtime.get("memory_limit_bytes")
+        memory_label = f"{memory} / {gib(limit)}" if limit else memory
+        resource_col1, resource_col2, resource_col3, resource_col4 = st.columns(4)
+        resource_col1.metric("Memoria del worker", memory_label)
+        resource_col2.metric("Swap del worker", gib(runtime.get("swap_bytes")))
+        resource_col3.metric("Carga del servidor", f"{runtime.get('load_1', 0):.2f}", help="Promedio de carga del último minuto.")
+        resource_col4.metric("Disco de datos libre", f"{runtime.get('data_free_percent', 0):.1f}%")
+        st.caption(f"Última lectura: {runtime.get('recorded_at', 'sin datos')} · carga 5/15 min: {runtime.get('load_5', 0):.2f} / {runtime.get('load_15', 0):.2f}")
+    else:
+        st.info("Las métricas aparecerán al iniciar o reanudar un ciclo de documentos.")
 
 @st.cache_data(ttl=15)
 def get_pipeline_runs():
@@ -217,48 +229,48 @@ def get_pipeline_runs():
         db.close()
 
 
-pipeline_runs = get_pipeline_runs()
-if pipeline_runs:
-    st.dataframe(pd.DataFrame(pipeline_runs), use_container_width=True)
-    db = SessionLocal()
-    try:
-        active_row = next((row for row in pipeline_runs if row["estado"] in {"running", "paused"}), None)
-        if active_row:
-            counts = db.execute(text("SELECT status, count(*) FROM pipeline_run_assets WHERE pipeline_run_id = :run_id GROUP BY status"), {"run_id": active_row["id"]}).all()
-            st.caption("Progreso por estado: " + " · ".join(f"{status}: {count}" for status, count in counts))
-    finally:
-        db.close()
-    active = next((run for run in pipeline_runs if run["estado"] in {"running", "paused"}), None)
-    if active:
-        st.caption(f"Lote activo: {active['id']} · fase {active['fase']}")
-        action_col, reason_col = st.columns([1, 2])
-        reason = reason_col.text_input("Motivo de cancelación", key="pipeline_cancel_reason")
+with pipeline_tab:
+    st.markdown("---")
+    st.subheader("Pipeline de fuentes públicas")
+    pipeline_runs = get_pipeline_runs()
+    if pipeline_runs:
+        st.dataframe(pd.DataFrame(pipeline_runs), use_container_width=True)
         db = SessionLocal()
         try:
-            run = db.query(PipelineRun).filter_by(id=active["id"]).first()
-            if action_col.button("Pausar lote", disabled=active["estado"] != "running"):
-                PipelineOrchestrator.pause(run)
-                db.commit()
-                notify_pipeline_event(run, "pausado", "Pausa solicitada desde el dashboard.")
-                st.cache_data.clear()
-                st.rerun()
-            if action_col.button("Reanudar lote", disabled=active["estado"] != "paused"):
-                PipelineOrchestrator.start(run)
-                db.commit()
-                notify_pipeline_event(run, "reanudado", "Reanudado desde el dashboard.")
-                if run.current_phase == "download" and not (run.summary or {}).get("discovery_completed"):
-                    discover_public_sources_task.delay(str(run.id))
-                else:
-                    execute_staged_public_pipeline_task.delay(str(run.id))
-                st.cache_data.clear()
-                st.rerun()
-            if action_col.button("Cancelar lote", disabled=not reason):
-                PipelineOrchestrator.cancel(run, reason)
-                db.commit()
-                notify_pipeline_event(run, "cancelado", reason)
-                st.cache_data.clear()
-                st.rerun()
+            active_row = next((row for row in pipeline_runs if row["estado"] in {"running", "paused"}), None)
+            if active_row:
+                counts = db.execute(text("SELECT status, count(*) FROM pipeline_run_assets WHERE pipeline_run_id = :run_id GROUP BY status"), {"run_id": active_row["id"]}).all()
+                st.caption("Progreso por estado: " + " · ".join(f"{status}: {count}" for status, count in counts))
         finally:
             db.close()
-else:
-    st.info("Aún no hay lotes públicos registrados.")
+        active = next((run for run in pipeline_runs if run["estado"] in {"running", "paused"}), None)
+        if active:
+            st.caption(f"Lote activo: {active['id']} · fase {active['fase']}")
+            action_col, reason_col = st.columns([1, 2])
+            reason = reason_col.text_input("Motivo de cancelación", key="pipeline_cancel_reason")
+            db = SessionLocal()
+            try:
+                run = db.query(PipelineRun).filter_by(id=active["id"]).first()
+                if action_col.button("Pausar lote", disabled=active["estado"] != "running"):
+                    PipelineOrchestrator.pause(run)
+                    db.commit()
+                    notify_pipeline_event(run, "pausado", "Pausa solicitada desde el dashboard.")
+                    st.cache_data.clear()
+                    st.rerun()
+                if action_col.button("Reanudar lote", disabled=active["estado"] != "paused"):
+                    PipelineOrchestrator.start(run)
+                    db.commit()
+                    notify_pipeline_event(run, "reanudado", "Reanudado desde el dashboard.")
+                    execute_staged_public_pipeline_task.delay(str(run.id))
+                    st.cache_data.clear()
+                    st.rerun()
+                if action_col.button("Cancelar lote", disabled=not reason):
+                    PipelineOrchestrator.cancel(run, reason)
+                    db.commit()
+                    notify_pipeline_event(run, "cancelado", reason)
+                    st.cache_data.clear()
+                    st.rerun()
+            finally:
+                db.close()
+    else:
+        st.info("Aún no hay lotes públicos registrados.")

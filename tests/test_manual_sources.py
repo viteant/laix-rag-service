@@ -53,6 +53,7 @@ def test_manual_sources_keep_original_filename_and_are_idempotent(tmp_path: Path
     source_root = tmp_path / "source"
     pdf = source_root / "jurisprudencia" / "10866.pdf"
     pdf.parent.mkdir(parents=True)
+    (pdf.parent / "146005.pdf").mkdir()
     _pdf(pdf)
     db = _Db()
     run = PipelineRun(id=uuid4())

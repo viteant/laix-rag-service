@@ -25,10 +25,14 @@ def register_manual_sources(db: Session, run: PipelineRun, root: Path = Path("da
     if summary.get("manual_sources_registration_completed"):
         return 0
 
-    files_by_type = {
-        source_type: list((root / source_type).rglob("*.pdf")) if (root / source_type).exists() else []
-        for source_type in MANUAL_SOURCE_TYPES
-    }
+    files_by_type = {}
+    for source_type in MANUAL_SOURCE_TYPES:
+        directory = root / source_type
+        candidates = list(directory.rglob("*.pdf")) if directory.exists() else []
+        ignored_directories = [path for path in candidates if path.is_dir()]
+        for path in ignored_directories:
+            print(f"Omitiendo directorio con extensión PDF [{source_type} - {path.name}]")
+        files_by_type[source_type] = [path for path in candidates if path.is_file()]
     total = sum(len(files) for files in files_by_type.values())
     processed = 0
     registered = 0

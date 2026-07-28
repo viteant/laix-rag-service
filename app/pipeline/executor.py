@@ -255,23 +255,59 @@ class PublicPipelineExecutor:
         run_asset.status = PipelineAssetStatus.CLEANED.value
 
     def process_scope_to_r2(self, run: PipelineRun, source_type: str, source_subtype: str | None = None) -> None:
-        """Finish one source scope through verified R2, keeping TXT for final RAG."""
-        phases = (
-            (PipelinePhase.OPTIMIZE.value, PipelineAssetStatus.DOWNLOADED.value, self.transformer.optimize),
-            (PipelinePhase.EXTRACT_TEXT.value, PipelineAssetStatus.OPTIMIZED.value, self.transformer.extract_text),
-            (PipelinePhase.CLASSIFY_REGISTRO_OFICIAL.value, PipelineAssetStatus.TEXT_READY.value, self.classifier.classify),
-            (PipelinePhase.UPLOAD.value, PipelineAssetStatus.CLASSIFIED.value, self.upload_and_verify),
-        )
-        for phase, required, action in phases:
+        """Finish each PDF through R2 before taking the next batch from this scope."""
+        while True:
             self._ensure_running(run)
-            run.current_phase = phase
-            self.db.commit()
-            self._execute_phase(run, required, action, source_type, source_subtype)
-        for item in self._run_assets(run):
-            if self._matches_scope(item, source_type, source_subtype) and item.status == PipelineAssetStatus.VERIFIED.value:
-                print(f"Limpiando PDF local {asset_log_context(item)} [fuente completada]")
-                self.delete_local_pdfs(item)
-        self.db.commit()
+            candidates = [item.id for item in self._run_assets(run) if self._matches_scope(item, source_type, source_subtype) and (
+                item.status in {PipelineAssetStatus.DOWNLOADED.value, PipelineAssetStatus.OPTIMIZED.value, PipelineAssetStatus.TEXT_READY.value, PipelineAssetStatus.CLASSIFIED.value}
+                or (item.status == PipelineAssetStatus.VERIFIED.value and not (item.asset.metadata_json or {}).get("scope_pdf_cleaned_at"))
+            )][:max(1, settings.PIPELINE_PROCESS_CONCURRENCY)]
+            if not candidates:
+                return
+            with ThreadPoolExecutor(max_workers=len(candidates)) as pool:
+                for future in [pool.submit(self._process_scope_asset, run.id, asset_id) for asset_id in candidates]:
+                    future.result()
+
+    @classmethod
+    def _process_scope_asset(cls, run_id, asset_id) -> None:
+        """Run one asset end-to-end, preserving the TXT and releasing both PDFs."""
+        db = SessionLocal()
+        try:
+            run = db.query(PipelineRun).filter_by(id=run_id).first()
+            run_asset = db.query(PipelineRunAsset).filter_by(id=asset_id).first()
+            executor = cls(db)
+            if not run or not run_asset:
+                return
+            executor._ensure_running(run)
+            phases = {
+                PipelineAssetStatus.DOWNLOADED.value: ("Optimizando", executor.transformer.optimize),
+                PipelineAssetStatus.OPTIMIZED.value: ("Extrayendo texto", executor.transformer.extract_text),
+                PipelineAssetStatus.TEXT_READY.value: ("Clasificando", executor.classifier.classify),
+                PipelineAssetStatus.CLASSIFIED.value: ("Subiendo a R2", executor.upload_and_verify),
+            }
+            while run_asset.status in phases:
+                label, action = phases[run_asset.status]
+                print(f"{label} {asset_log_context(run_asset)} [ciclo por documento]")
+                action(run_asset)
+                db.commit()
+                db.refresh(run_asset)
+            if run_asset.status == PipelineAssetStatus.VERIFIED.value:
+                print(f"Limpiando PDF local {asset_log_context(run_asset)} [ciclo por documento]")
+                executor.delete_local_pdfs(run_asset)
+                run_asset.asset.metadata_json = {**(run_asset.asset.metadata_json or {}), "scope_pdf_cleaned_at": datetime.now(timezone.utc).isoformat()}
+                db.commit()
+        except Exception as error:
+            db.rollback()
+            run_asset = db.query(PipelineRunAsset).filter_by(id=asset_id).first()
+            if run_asset:
+                run_asset.status = PipelineAssetStatus.SKIPPED.value
+                run_asset.detail = str(error)
+                run_asset.asset.status = PipelineAssetStatus.FAILED.value
+                run_asset.asset.error_message = str(error)
+                db.commit()
+                print(f"Perdido {asset_log_context(run_asset)}: {error}")
+        finally:
+            db.close()
 
     @staticmethod
     def delete_local_pdfs(run_asset: PipelineRunAsset) -> None:

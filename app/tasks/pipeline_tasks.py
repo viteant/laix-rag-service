@@ -65,6 +65,12 @@ def discover_and_execute_public_pipeline_task(run_id: str) -> dict:
     discovery = discover_public_sources_task(run_id)
     if discovery.get("status") != "completed":
         return discovery
+    return execute_public_pipeline_task.run(run_id)
+
+
+@celery_app.task(name="app.tasks.pipeline_tasks.execute_public_pipeline_task")
+def execute_public_pipeline_task(run_id: str) -> dict:
+    """Continue an already-discovered manual batch in the worker background."""
     db = SessionLocal()
     try:
         run = db.query(PipelineRun).filter_by(id=run_id).first()

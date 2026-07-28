@@ -13,7 +13,7 @@ from app.core.database import SessionLocal
 from app.pipeline.models import PipelineRun
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
-from app.tasks.pipeline_tasks import discover_public_sources_task
+from app.tasks.pipeline_tasks import discover_public_sources_task, execute_public_pipeline_task
 
 load_dotenv()
 
@@ -184,6 +184,8 @@ if pipeline_runs:
                 notify_pipeline_event(run, "reanudado", "Reanudado desde el dashboard.")
                 if run.current_phase == "download" and not (run.summary or {}).get("discovery_completed"):
                     discover_public_sources_task.delay(str(run.id))
+                else:
+                    execute_public_pipeline_task.delay(str(run.id))
                 st.cache_data.clear()
                 st.rerun()
             if action_col.button("Cancelar lote", disabled=not reason):

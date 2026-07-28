@@ -8,7 +8,7 @@ from app.pipeline.executor import PublicPipelineExecutor
 from app.pipeline.models import PipelineRun, PipelineRunStatus
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
-from app.tasks.pipeline_tasks import discover_public_sources_task
+from app.tasks.pipeline_tasks import discover_public_sources_task, execute_public_pipeline_task
 
 router = APIRouter(prefix="/v1/admin/pipeline", tags=["Pipeline público"])
 
@@ -80,7 +80,8 @@ def resume_run(run_id: str, db: Session = Depends(get_db)):
     if run.current_phase == "download" and not (run.summary or {}).get("discovery_completed"):
         task = discover_public_sources_task.delay(str(run.id))
         return {**_serialize(run), "task_id": task.id}
-    return _serialize(run)
+    task = execute_public_pipeline_task.delay(str(run.id))
+    return {**_serialize(run), "task_id": task.id}
 
 
 @router.post("/runs/{run_id}/cancel", dependencies=[Depends(get_current_system)])

@@ -97,7 +97,9 @@ class PublicPipelineExecutor:
             PipelineAssetStatus.TEXT_READY.value: self.classifier.classify,
             PipelineAssetStatus.CLASSIFIED.value: self.upload_and_verify,
         }
-        while self.space_monitor.under_pressure():
+        # Once pressure begins, keep freeing verified PDFs until the recovery
+        # threshold is reached; stopping at 20.01% would pause unnecessarily.
+        while not self.space_monitor.recovered():
             progressed = False
             for run_asset in self._run_assets(run):
                 self._ensure_running(run)

@@ -89,7 +89,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.worker
-    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -c 4
+    # One coordinator plus four independent PDF workers use the available vCores.
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -c 5
     container_name: laix_rag_worker_prod
     env_file: .env
     environment:

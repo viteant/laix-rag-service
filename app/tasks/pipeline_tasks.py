@@ -10,6 +10,13 @@ from app.pipeline.executor import PublicPipelineExecutor
 from app.pipeline.manual_sources import register_manual_sources
 
 
+@celery_app.task(name="app.tasks.pipeline_tasks.process_scope_asset_task")
+def process_scope_asset_task(run_id: str, asset_id: str) -> dict:
+    """CPU-isolated document cycle used by the staged coordinator."""
+    PublicPipelineExecutor._process_scope_asset(run_id, asset_id)
+    return {"run_id": run_id, "asset_id": asset_id}
+
+
 @celery_app.task(name="app.tasks.pipeline_tasks.discover_public_sources_task")
 def discover_public_sources_task(run_id: str) -> dict:
     """Persistently discover public assets and honor administrator controls."""

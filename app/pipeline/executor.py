@@ -1,11 +1,13 @@
 from pathlib import Path
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
+import time
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.celery_app import celery_app
 from app.pipeline.downloader import DownloadService
 from app.pipeline.models import PipelineAssetStatus, PipelinePhase, PipelineRun, PipelineRunAsset, PipelineRunStatus
 from app.pipeline.orchestrator import PipelineOrchestrator
@@ -264,9 +266,10 @@ class PublicPipelineExecutor:
             )][:max(1, settings.PIPELINE_PROCESS_CONCURRENCY)]
             if not candidates:
                 return
-            with ThreadPoolExecutor(max_workers=len(candidates)) as pool:
-                for future in [pool.submit(self._process_scope_asset, run.id, asset_id) for asset_id in candidates]:
-                    future.result()
+            jobs = [celery_app.send_task("app.tasks.pipeline_tasks.process_scope_asset_task", args=[str(run.id), str(asset_id)]) for asset_id in candidates]
+            while not all(job.ready() for job in jobs):
+                self._ensure_running(run)
+                time.sleep(0.5)
 
     @classmethod
     def _process_scope_asset(cls, run_id, asset_id) -> None:

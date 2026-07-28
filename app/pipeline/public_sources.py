@@ -51,3 +51,19 @@ def discover_public_sources(
         db.commit()
         counts[source.source_subtype] = count
     return counts
+
+
+def discover_public_source_subtype(db: Session, run: PipelineRun, subtype: str, should_continue=None, on_progress=None) -> int:
+    """Discover exactly one Registro Oficial subtype for staged storage-safe runs."""
+    source = next(source for source in ensure_public_sources(db) if source.source_subtype == subtype)
+    discovery = DiscoveryService(db)
+    count = 0
+    connector = RegistroOficialConnector(source.source_subtype, source.base_url)
+    try:
+        for candidate in connector.discover(should_continue=should_continue, on_progress=on_progress):
+            _, created = discovery.record(run, source, candidate)
+            count += int(created)
+    except Exception as error:
+        print(f"Fail [{subtype} - descubrimiento]: {error}")
+    db.commit()
+    return count

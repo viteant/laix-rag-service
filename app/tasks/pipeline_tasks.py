@@ -4,7 +4,8 @@ from sqlalchemy import text
 from app.pipeline.models import PipelineRun, PipelineRunStatus
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
-from app.pipeline.public_sources import discover_public_sources
+from app.pipeline.public_sources import discover_public_sources, discover_public_source_subtype
+from app.pipeline.connectors.registro_oficial import REGISTRO_OFICIAL_SECTIONS
 from app.pipeline.executor import PublicPipelineExecutor
 from app.pipeline.manual_sources import register_manual_sources
 
@@ -67,10 +68,51 @@ def discover_public_sources_task(run_id: str) -> dict:
 @celery_app.task(name="app.tasks.pipeline_tasks.discover_and_execute_public_pipeline_task")
 def discover_and_execute_public_pipeline_task(run_id: str) -> dict:
     """Manual first-run worker: discover once, then execute phases in background."""
-    discovery = discover_public_sources_task(run_id)
-    if discovery.get("status") != "completed":
-        return discovery
-    return execute_public_pipeline_task.run(run_id)
+    return execute_staged_public_pipeline_task.run(run_id)
+
+
+@celery_app.task(name="app.tasks.pipeline_tasks.execute_staged_public_pipeline_task")
+def execute_staged_public_pipeline_task(run_id: str) -> dict:
+    """Storage-first order: manual sources, then one Registro subtype at a time, RAG last."""
+    db = SessionLocal()
+    try:
+        run = db.query(PipelineRun).filter_by(id=run_id).first()
+        if not run:
+            return {"status": "error", "message": "Pipeline run not found"}
+        if run.status == PipelineRunStatus.PENDING.value:
+            PipelineOrchestrator.start(run)
+            db.commit()
+        executor = PublicPipelineExecutor(db)
+        manual_assets = register_manual_sources(db, run)
+        for source_type in ("jurisprudencia", "documentos"):
+            executor._ensure_running(run)
+            print(f"Procesando fuente manual [{source_type}] hasta R2")
+            executor.process_scope_to_r2(run, source_type)
+
+        for subtype in REGISTRO_OFICIAL_SECTIONS:
+            executor._ensure_running(run)
+            print(f"Descubriendo y procesando [registro_oficial - {subtype}]")
+            discovered = discover_public_source_subtype(db, run, subtype)
+            summary = dict(run.summary or {})
+            summary["active_subtype"] = subtype
+            summary.setdefault("staged_discovery", {})[subtype] = discovered
+            run.summary = summary
+            db.commit()
+            run.current_phase = "download"
+            if not executor._execute_download_phase(run, "registro_oficial", subtype):
+                return {"status": run.status, "run_id": run_id, "phase": run.current_phase}
+            executor.process_scope_to_r2(run, "registro_oficial", subtype)
+
+        run.current_phase = "ingest_rag"
+        db.commit()
+        executor._execute_phase(run, PipelineAssetStatus.VERIFIED.value, executor.rag_loader.load)
+        run.current_phase = "cleanup"
+        executor._execute_phase(run, PipelineAssetStatus.INGESTED.value, executor.cleanup_local_pdfs)
+        PipelineOrchestrator.complete(run)
+        db.commit()
+        return {"status": run.status, "run_id": run_id, "manual_assets": manual_assets}
+    finally:
+        db.close()
 
 
 @celery_app.task(name="app.tasks.pipeline_tasks.execute_public_pipeline_task")

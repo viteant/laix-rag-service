@@ -51,8 +51,11 @@ class PublicPipelineExecutor:
             self.storage = R2StorageService(self.db)
         self.storage.upload_and_verify(run_asset)
 
-    def _execute_phase(self, run: PipelineRun, required_status: str, action) -> None:
-        asset_ids = [item.id for item in self._run_assets(run) if item.status == required_status]
+    def _matches_scope(self, item, source_type: str | None, source_subtype: str | None) -> bool:
+        return (not source_type or item.asset.source.source_type == source_type) and (not source_subtype or item.asset.source.source_subtype == source_subtype)
+
+    def _execute_phase(self, run: PipelineRun, required_status: str, action, source_type: str | None = None, source_subtype: str | None = None) -> None:
+        asset_ids = [item.id for item in self._run_assets(run) if item.status == required_status and self._matches_scope(item, source_type, source_subtype)]
         configured_workers = (
             settings.PIPELINE_OCR_CONCURRENCY
             if run.current_phase == PipelinePhase.EXTRACT_TEXT.value
@@ -177,10 +180,10 @@ class PublicPipelineExecutor:
         finally:
             db.close()
 
-    def _execute_download_phase(self, run: PipelineRun) -> bool:
+    def _execute_download_phase(self, run: PipelineRun, source_type: str | None = None, source_subtype: str | None = None) -> bool:
         """Download until complete, or pause/relieve when the data pool is low."""
         while True:
-            pending = next((item for item in self._run_assets(run) if item.status == PipelineAssetStatus.DISCOVERED.value), None)
+            pending = next((item for item in self._run_assets(run) if item.status == PipelineAssetStatus.DISCOVERED.value and self._matches_scope(item, source_type, source_subtype)), None)
             if pending is None:
                 return True
             if self.space_monitor.under_pressure():
@@ -250,6 +253,25 @@ class PublicPipelineExecutor:
         self.delete_local_pdfs(run_asset)
         asset.status = PipelineAssetStatus.CLEANED.value
         run_asset.status = PipelineAssetStatus.CLEANED.value
+
+    def process_scope_to_r2(self, run: PipelineRun, source_type: str, source_subtype: str | None = None) -> None:
+        """Finish one source scope through verified R2, keeping TXT for final RAG."""
+        phases = (
+            (PipelinePhase.OPTIMIZE.value, PipelineAssetStatus.DOWNLOADED.value, self.transformer.optimize),
+            (PipelinePhase.EXTRACT_TEXT.value, PipelineAssetStatus.OPTIMIZED.value, self.transformer.extract_text),
+            (PipelinePhase.CLASSIFY_REGISTRO_OFICIAL.value, PipelineAssetStatus.TEXT_READY.value, self.classifier.classify),
+            (PipelinePhase.UPLOAD.value, PipelineAssetStatus.CLASSIFIED.value, self.upload_and_verify),
+        )
+        for phase, required, action in phases:
+            self._ensure_running(run)
+            run.current_phase = phase
+            self.db.commit()
+            self._execute_phase(run, required, action, source_type, source_subtype)
+        for item in self._run_assets(run):
+            if self._matches_scope(item, source_type, source_subtype) and item.status == PipelineAssetStatus.VERIFIED.value:
+                print(f"Limpiando PDF local {asset_log_context(item)} [fuente completada]")
+                self.delete_local_pdfs(item)
+        self.db.commit()
 
     @staticmethod
     def delete_local_pdfs(run_asset: PipelineRunAsset) -> None:

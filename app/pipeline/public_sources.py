@@ -39,12 +39,15 @@ def discover_public_sources(
             continue
         connector = RegistroOficialConnector(source.source_subtype, source.base_url)
         count = 0
-        for candidate in connector.discover(
-            should_continue=should_continue,
-            on_progress=(lambda folders, subtype=source.source_subtype: on_progress(subtype, folders)) if on_progress else None,
-        ):
-            _, created = discovery.record(run, source, candidate)
-            count += int(created)
+        try:
+            for candidate in connector.discover(
+                should_continue=should_continue,
+                on_progress=(lambda folders, subtype=source.source_subtype: on_progress(subtype, folders)) if on_progress else None,
+            ):
+                _, created = discovery.record(run, source, candidate)
+                count += int(created)
+        except Exception as error:
+            print(f"Fail [{source.source_subtype} - descubrimiento]: {error}")
         db.commit()
         counts[source.source_subtype] = count
     return counts

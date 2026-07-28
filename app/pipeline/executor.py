@@ -49,7 +49,6 @@ class PublicPipelineExecutor:
         self.storage.upload_and_verify(run_asset)
 
     def _execute_phase(self, run: PipelineRun, required_status: str, action) -> None:
-        failures = []
         for run_asset in self._run_assets(run):
             self._ensure_running(run)
             if run_asset.status == PipelineAssetStatus.SKIPPED.value:
@@ -62,16 +61,12 @@ class PublicPipelineExecutor:
                 self.db.commit()
             except Exception as error:
                 self.db.rollback()
-                run_asset.status = PipelineAssetStatus.FAILED.value
+                run_asset.status = PipelineAssetStatus.SKIPPED.value
                 run_asset.detail = str(error)
                 run_asset.asset.status = PipelineAssetStatus.FAILED.value
                 run_asset.asset.error_message = str(error)
                 self.db.commit()
-                failures.append(run_asset.asset.canonical_filename)
-        if failures:
-            PipelineOrchestrator.fail(run, f"Phase {run.current_phase} failed for: {', '.join(failures)}")
-            self.db.commit()
-            raise BatchExecutionError(run.error_message)
+                print(f"Perdido {asset_log_context(run_asset)}: {error}")
 
     @staticmethod
     def _phase_label(phase: str) -> str:
@@ -151,13 +146,13 @@ class PublicPipelineExecutor:
                 self.db.commit()
             except Exception as error:
                 self.db.rollback()
-                pending.status = PipelineAssetStatus.FAILED.value
+                pending.status = PipelineAssetStatus.SKIPPED.value
                 pending.detail = str(error)
                 pending.asset.status = PipelineAssetStatus.FAILED.value
                 pending.asset.error_message = str(error)
-                PipelineOrchestrator.fail(run, f"Phase download failed for: {pending.asset.canonical_filename}")
                 self.db.commit()
-                raise BatchExecutionError(run.error_message) from error
+                print(f"Perdido {asset_log_context(pending)}: {error}")
+                continue
 
     def execute_current_phase(self, run: PipelineRun) -> PipelineRun:
         if run.status == PipelineRunStatus.PENDING.value:

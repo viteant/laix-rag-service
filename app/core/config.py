@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     PIPELINE_RESUME_FREE_SPACE_PERCENT: float = 40
     PDF_OPTIMIZATION_PROFILE: str = "ebook"
     PDF_OPTIMIZATION_TIMEOUT_SECONDS: int = 600
-    PIPELINE_PROCESS_CONCURRENCY: int = 2
+    PIPELINE_PROCESS_CONCURRENCY: int = 4
     PIPELINE_OCR_CONCURRENCY: int = 4
 
     # Cloudflare R2 (S3-compatible API)

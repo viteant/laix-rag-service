@@ -42,3 +42,8 @@ sudo systemctl disable --now laix-public-pipeline.service
 ```
 
 Además define `PUBLIC_PIPELINE_SCHEDULER_ENABLED=true` en `.env` de producción.
+# Fuentes PDF persistentes
+
+Los PDFs manuales no se guardan dentro de `/opt/laix-rag`. En producción se
+suben a `/data/laix-rag/source/{jurisprudencia,documentos}`; Docker los monta
+como `/app/data/source`. Esta ruta no forma parte del despliegue `rsync`.

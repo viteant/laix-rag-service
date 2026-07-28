@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 # Asegurar que importamos los modulos correctamente
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
 from app.core.database import SessionLocal
+from app.core.config import settings
 from app.pipeline.models import PipelineRun
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
@@ -87,18 +88,81 @@ def get_metrics():
     finally:
         db.close()
 
+
+@st.cache_data(ttl=10)
+def get_pipeline_metrics():
+    """Read batch assets directly so progress is visible before RAG ingestion."""
+    db = SessionLocal()
+    try:
+        run = db.query(PipelineRun).filter(PipelineRun.status.in_(("running", "paused"))).order_by(PipelineRun.requested_at.desc()).first()
+        if not run:
+            run = db.query(PipelineRun).order_by(PipelineRun.requested_at.desc()).first()
+        if not run:
+            return None, pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+        params = {"run_id": str(run.id)}
+        status_df = pd.read_sql_query(text("""
+            SELECT pra.status, COUNT(*) AS count
+            FROM pipeline_run_assets pra
+            WHERE pra.pipeline_run_id = :run_id
+            GROUP BY pra.status ORDER BY pra.status
+        """), db.bind, params=params)
+        type_df = pd.read_sql_query(text("""
+            SELECT ps.source_type, COUNT(*) AS count
+            FROM pipeline_run_assets pra
+            JOIN pipeline_assets pa ON pa.id = pra.asset_id
+            JOIN pipeline_sources ps ON ps.id = pa.source_id
+            WHERE pra.pipeline_run_id = :run_id
+            GROUP BY ps.source_type ORDER BY ps.source_type
+        """), db.bind, params=params)
+        recent_df = pd.read_sql_query(text("""
+            SELECT ps.source_type AS tipo, ps.source_subtype AS subtipo,
+                   pa.canonical_filename AS archivo, pra.status AS estado,
+                   pra.updated_at AS actualizado, pa.r2_verified_at AS r2_verificado,
+                   pra.detail AS detalle
+            FROM pipeline_run_assets pra
+            JOIN pipeline_assets pa ON pa.id = pra.asset_id
+            JOIN pipeline_sources ps ON ps.id = pa.source_id
+            WHERE pra.pipeline_run_id = :run_id
+            ORDER BY pra.updated_at DESC
+            LIMIT 20
+        """), db.bind, params=params)
+        run_info = {
+            "id": str(run.id), "estado": run.status, "fase": run.current_phase,
+            "summary": run.summary or {},
+        }
+        return run_info, status_df, type_df, recent_df
+    finally:
+        db.close()
+
 # Cargar datos
 status_df, type_df, recent_df, chunks_total, cases_total = get_metrics()
+pipeline_run, pipeline_status_df, pipeline_type_df, pipeline_recent_df = get_pipeline_metrics()
+has_pipeline_assets = not pipeline_status_df.empty
+display_status_df = pipeline_status_df if has_pipeline_assets else status_df
+display_type_df = pipeline_type_df if has_pipeline_assets else type_df
+display_recent_df = pipeline_recent_df if has_pipeline_assets else recent_df
 
 # Métricas Top
 col1, col2, col3, col4 = st.columns(4)
-total_docs = status_df["count"].sum() if not status_df.empty else 0
-completed_docs = status_df[status_df["status"] == "completed"]["count"].sum() if not status_df.empty else 0
+total_docs = display_status_df["count"].sum() if not display_status_df.empty else 0
+ready_statuses = {"completed", "verified", "ingested", "cleaned"}
+completed_docs = display_status_df[display_status_df["status"].isin(ready_statuses)]["count"].sum() if not display_status_df.empty else 0
 
-col1.metric("Total Documentos", int(total_docs))
-col2.metric("Documentos Completados", int(completed_docs))
+col1.metric("Activos del lote" if has_pipeline_assets else "Total Documentos", int(total_docs))
+col2.metric("Verificados / completados", int(completed_docs))
 col3.metric("Casos Jurídicos Detectados", int(cases_total))
 col4.metric("Chunks Generados (Vectores)", int(chunks_total))
+
+if pipeline_run:
+    st.caption(f"Lote mostrado: {pipeline_run['id']} · estado {pipeline_run['estado']} · fase {pipeline_run['fase']}")
+    pressure = pipeline_run["summary"].get("storage_pressure", {})
+    if pressure:
+        free_percent = float(pressure.get("free_percent", 0))
+        recovery_target = settings.PIPELINE_RESUME_FREE_SPACE_PERCENT
+        space_col, progress_col = st.columns([1, 3])
+        space_col.metric("Espacio libre del pool", f"{free_percent:.1f}%")
+        progress_col.progress(min(free_percent / recovery_target, 1.0), text=f"Recuperación de disco: {free_percent:.1f}% / {recovery_target:.0f}% · PDFs liberados: {pressure.get('cleaned_pdfs', 0)}")
 
 st.markdown("---")
 
@@ -107,17 +171,17 @@ col_chart1, col_chart2 = st.columns(2)
 
 with col_chart1:
     st.subheader("Estado de Procesamiento")
-    if not status_df.empty:
-        fig_status = px.pie(status_df, values='count', names='status', color='status',
-                            color_discrete_map={'completed':'green', 'processing':'orange', 'failed':'red', 'pending':'gray'})
+    if not display_status_df.empty:
+        fig_status = px.pie(display_status_df, values='count', names='status', color='status',
+                            color_discrete_map={'completed':'green', 'verified':'green', 'ingested':'green', 'cleaned':'green', 'classified':'blue', 'text_ready':'blue', 'optimized':'orange', 'downloaded':'orange', 'discovered':'gray', 'failed':'red', 'skipped':'red'})
         st.plotly_chart(fig_status, use_container_width=True)
     else:
         st.info("No hay datos suficientes para mostrar.")
 
 with col_chart2:
     st.subheader("Tipos de Documentos")
-    if not type_df.empty:
-        fig_type = px.bar(type_df, x='source_type', y='count', color='source_type')
+    if not display_type_df.empty:
+        fig_type = px.bar(display_type_df, x='source_type', y='count', color='source_type')
         st.plotly_chart(fig_type, use_container_width=True)
     else:
         st.info("No hay datos suficientes para mostrar.")
@@ -125,11 +189,11 @@ with col_chart2:
 st.markdown("---")
 
 # Tabla Reciente
-st.subheader("Últimos Documentos Procesados")
-if not recent_df.empty:
-    st.dataframe(recent_df, use_container_width=True)
+st.subheader("Últimos Activos del Pipeline" if has_pipeline_assets else "Últimos Documentos Procesados")
+if not display_recent_df.empty:
+    st.dataframe(display_recent_df, use_container_width=True, hide_index=True)
 else:
-    st.info("No se encontraron documentos en la base de datos.")
+    st.info("No se encontraron activos del pipeline ni documentos en la base de datos.")
 
 if st.button("🔄 Refrescar Datos"):
     st.cache_data.clear()

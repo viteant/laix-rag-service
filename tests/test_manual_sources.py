@@ -19,6 +19,9 @@ class _Query:
     def first(self):
         return next((item for item in self.items if all(getattr(item, key) == value for key, value in self.filters.items())), None)
 
+    def all(self):
+        return [item for item in self.items if all(getattr(item, key) == value for key, value in self.filters.items())]
+
 
 class _Db:
     def __init__(self):
@@ -60,4 +63,5 @@ def test_manual_sources_keep_original_filename_and_are_idempotent(tmp_path: Path
     asset = db.items[PipelineAsset][0]
     assert asset.canonical_filename == "10866.pdf"
     assert Path(asset.downloaded_pdf_path) == pdf
+    assert asset.metadata_json["manual_file_fingerprint"]["relative_path"] == "jurisprudencia/10866.pdf"
     assert len(db.items[PipelineRunAsset]) == 1

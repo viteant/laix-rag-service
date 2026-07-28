@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+from app.core.config import settings
 from app.pipeline.models import PipelinePhase, PipelineRun, PipelineRunStatus
 
 
@@ -7,8 +8,8 @@ PHASES = tuple(PipelinePhase)
 
 
 def next_execution_after(completed_at: datetime) -> datetime:
-    """Schedule the successor exactly 24 hours after a successful completion."""
-    return completed_at + timedelta(days=1)
+    """Schedule the successor after the configured successful-run interval."""
+    return completed_at + timedelta(days=settings.PUBLIC_PIPELINE_INTERVAL_DAYS)
 
 
 class PipelineOrchestrator:

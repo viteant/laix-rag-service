@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     R2_REGION: str = "auto"
     R2_PREFIX: str = "public"
     PUBLIC_PIPELINE_SCHEDULER_ENABLED: bool = False
+    PUBLIC_PIPELINE_INTERVAL_DAYS: int = 5
 
     # Alertas SMTP
     SMTP_HOST: str = ""

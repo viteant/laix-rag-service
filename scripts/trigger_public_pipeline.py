@@ -21,7 +21,7 @@ def main() -> int:
             try:
                 run = create_due_successor(db)
                 if run:
-                    notify_pipeline_event(run, "programado", "Creado 24 horas después de la finalización exitosa anterior.")
+                    notify_pipeline_event(run, "programado", f"Creado {settings.PUBLIC_PIPELINE_INTERVAL_DAYS} días después de la finalización exitosa anterior.")
                     discover_public_sources_task.delay(str(run.id))
                     print(f"Scheduled public pipeline run: {run.id}")
             finally:

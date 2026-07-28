@@ -27,7 +27,7 @@ docker compose -f docker-compose.prod.yml exec -T api python scripts/verify_sour
 ## Scheduler relativo
 
 El servicio `laix-public-pipeline.service` consulta cada minuto. Solo crea y encola
-un nuevo descubrimiento 24 horas después de que el lote anterior haya finalizado
+un nuevo lote cinco días después de que el lote anterior haya finalizado
 correctamente. Actívalo con:
 
 ```bash

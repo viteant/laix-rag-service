@@ -6,7 +6,7 @@ from app.pipeline.models import PipelineRun, PipelineRunStatus
 
 
 def create_due_successor(db: Session, now: datetime | None = None) -> PipelineRun | None:
-    """Create one scheduled run only after a successful predecessor is 24h old."""
+    """Create one scheduled run after a successful predecessor reaches its interval."""
     now = now or datetime.utcnow()
     completed_runs = db.query(PipelineRun).filter(
         PipelineRun.status == PipelineRunStatus.COMPLETED.value,

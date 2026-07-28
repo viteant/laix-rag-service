@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     PIPELINE_STORAGE_PATH: str = "/app/data"
     PIPELINE_MIN_FREE_SPACE_PERCENT: float = 20
     PIPELINE_RESUME_FREE_SPACE_PERCENT: float = 40
+    PDF_OPTIMIZATION_PROFILE: str = "ebook"
+    PDF_OPTIMIZATION_TIMEOUT_SECONDS: int = 600
 
     # Cloudflare R2 (S3-compatible API)
     R2_ENDPOINT_URL: str = ""

@@ -5,6 +5,7 @@ from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
 from app.pipeline.public_sources import discover_public_sources
 from app.pipeline.executor import PublicPipelineExecutor
+from app.pipeline.manual_sources import register_manual_sources
 
 
 @celery_app.task(name="app.tasks.pipeline_tasks.discover_public_sources_task")
@@ -21,6 +22,8 @@ def discover_public_sources_task(run_id: str) -> dict:
         if run.status != PipelineRunStatus.RUNNING.value:
             return {"status": run.status, "run_id": run_id}
 
+        manual_assets = register_manual_sources(db, run)
+
         def should_continue() -> bool:
             db.refresh(run)
             return run.status == PipelineRunStatus.RUNNING.value
@@ -35,6 +38,7 @@ def discover_public_sources_task(run_id: str) -> dict:
             db.commit()
 
         counts = discover_public_sources(db, run, should_continue, on_progress)
+        counts["manual"] = manual_assets
         db.refresh(run)
         if run.status != PipelineRunStatus.RUNNING.value:
             notify_pipeline_event(run, "descubrimiento detenido", f"Estado administrativo: {run.status}")
@@ -74,6 +78,8 @@ def execute_public_pipeline_task(run_id: str) -> dict:
     db = SessionLocal()
     try:
         run = db.query(PipelineRun).filter_by(id=run_id).first()
+        if run and run.current_phase == "download":
+            register_manual_sources(db, run)
         executor = PublicPipelineExecutor(db)
         while run and run.status == PipelineRunStatus.RUNNING.value:
             executor.execute_current_phase(run)

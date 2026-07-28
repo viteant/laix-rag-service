@@ -5,6 +5,7 @@ from pathlib import Path
 import fitz
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.pipeline.downloader import sha256_file
 from app.pipeline.models import PipelineAssetStatus, PipelineRunAsset
 from app.processing.text_cleaner import TextCleaner
@@ -32,6 +33,29 @@ class TransformService:
         source = asset.source
         return self.text_root / source.source_type / source.source_subtype / Path(asset.canonical_filename).with_suffix(".txt").name
 
+    @staticmethod
+    def _optimization_profile() -> str:
+        profile = settings.PDF_OPTIMIZATION_PROFILE.strip().lower()
+        if profile not in {"screen", "ebook", "printer", "prepress", "default"}:
+            raise TransformError(f"Unsupported PDF optimization profile: {profile}")
+        return profile
+
+    def _optimize_with_ghostscript(self, input_path: Path, output_path: Path) -> bool:
+        """Create a compact R2 copy while preserving the original for TXT extraction."""
+        profile = self._optimization_profile()
+        command = [
+            "gs", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.5", "-dNOPAUSE", "-dBATCH", "-dQUIET",
+            f"-dPDFSETTINGS=/{profile}", "-dDetectDuplicateImages=true", "-dCompressFonts=true",
+            f"-sOutputFile={output_path}", str(input_path),
+        ]
+        try:
+            subprocess.run(command, check=True, capture_output=True, timeout=settings.PDF_OPTIMIZATION_TIMEOUT_SECONDS)
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            print(f"Ghostscript unavailable or failed for {input_path.name}; using PyMuPDF fallback: {error}")
+            output_path.unlink(missing_ok=True)
+            return False
+        return output_path.is_file() and output_path.stat().st_size > 0
+
     def optimize(self, run_asset: PipelineRunAsset) -> Path:
         asset = run_asset.asset
         if not asset.downloaded_pdf_path:
@@ -47,7 +71,11 @@ class TransformService:
         try:
             with fitz.open(input_path) as original:
                 original_pages = len(original)
-                original.save(temporary, garbage=4, deflate=True, clean=True)
+
+            if not self._optimize_with_ghostscript(input_path, temporary):
+                with fitz.open(input_path) as original:
+                    original.save(temporary, garbage=4, deflate=True, clean=True)
+
             with fitz.open(temporary) as optimized:
                 if len(optimized) != original_pages:
                     raise TransformError("PDF optimization changed the page count")
@@ -80,11 +108,14 @@ class TransformService:
 
     def extract_text(self, run_asset: PipelineRunAsset) -> Path:
         asset = run_asset.asset
-        if not asset.optimized_pdf_path:
-            raise TransformError("An optimized PDF is required before text extraction")
-        pdf_path = Path(asset.optimized_pdf_path)
+        original_path = Path(asset.downloaded_pdf_path) if asset.downloaded_pdf_path else None
+        optimized_path = Path(asset.optimized_pdf_path) if asset.optimized_pdf_path else None
+        # Keep RAG extraction faithful even when the R2 PDF is aggressively compressed.
+        pdf_path = original_path if original_path and original_path.is_file() else optimized_path
+        if not pdf_path:
+            raise TransformError("A source or optimized PDF is required before text extraction")
         if not pdf_path.is_file():
-            raise TransformError(f"Optimized PDF is missing: {pdf_path}")
+            raise TransformError(f"PDF required for text extraction is missing: {pdf_path}")
 
         output_path = self.text_path_for(run_asset)
         output_path.parent.mkdir(parents=True, exist_ok=True)

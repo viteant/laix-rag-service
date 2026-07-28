@@ -1,5 +1,6 @@
 from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
+from sqlalchemy import text
 from app.pipeline.models import PipelineRun, PipelineRunStatus
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
@@ -76,7 +77,11 @@ def discover_and_execute_public_pipeline_task(run_id: str) -> dict:
 def execute_public_pipeline_task(run_id: str) -> dict:
     """Continue an already-discovered manual batch in the worker background."""
     db = SessionLocal()
+    locked = False
     try:
+        locked = bool(db.execute(text("SELECT pg_try_advisory_lock(hashtext(:run_id))"), {"run_id": run_id}).scalar())
+        if not locked:
+            return {"status": "already_running", "run_id": run_id}
         run = db.query(PipelineRun).filter_by(id=run_id).first()
         if run and run.current_phase == "download":
             register_manual_sources(db, run)
@@ -86,4 +91,6 @@ def execute_public_pipeline_task(run_id: str) -> dict:
             db.refresh(run)
         return {"status": run.status if run else "error", "run_id": run_id, "phase": run.current_phase if run else None}
     finally:
+        if locked:
+            db.execute(text("SELECT pg_advisory_unlock(hashtext(:run_id))"), {"run_id": run_id})
         db.close()

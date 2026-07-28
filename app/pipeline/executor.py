@@ -1,8 +1,11 @@
 from pathlib import Path
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.database import SessionLocal
 from app.pipeline.downloader import DownloadService
 from app.pipeline.models import PipelineAssetStatus, PipelinePhase, PipelineRun, PipelineRunAsset, PipelineRunStatus
 from app.pipeline.orchestrator import PipelineOrchestrator
@@ -49,24 +52,54 @@ class PublicPipelineExecutor:
         self.storage.upload_and_verify(run_asset)
 
     def _execute_phase(self, run: PipelineRun, required_status: str, action) -> None:
-        for run_asset in self._run_assets(run):
-            self._ensure_running(run)
-            if run_asset.status == PipelineAssetStatus.SKIPPED.value:
-                continue
-            if run_asset.status != required_status:
-                continue
+        asset_ids = [item.id for item in self._run_assets(run) if item.status == required_status]
+        configured_workers = (
+            settings.PIPELINE_OCR_CONCURRENCY
+            if run.current_phase == PipelinePhase.EXTRACT_TEXT.value
+            else settings.PIPELINE_PROCESS_CONCURRENCY
+        )
+        workers = min(max(1, configured_workers), len(asset_ids) or 1)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(self._execute_asset_phase, run.id, asset_id, required_status, run.current_phase) for asset_id in asset_ids]
+            for future in futures:
+                future.result()
+
+    @staticmethod
+    def _action_for_phase(executor, phase: str):
+        return {
+            PipelinePhase.OPTIMIZE.value: executor.transformer.optimize,
+            PipelinePhase.EXTRACT_TEXT.value: executor.transformer.extract_text,
+            PipelinePhase.CLASSIFY_REGISTRO_OFICIAL.value: executor.classifier.classify,
+            PipelinePhase.UPLOAD.value: executor.upload_and_verify,
+            PipelinePhase.INGEST_RAG.value: executor.rag_loader.load,
+            PipelinePhase.CLEANUP.value: executor.cleanup_local_pdfs,
+        }[phase]
+
+    @classmethod
+    def _execute_asset_phase(cls, run_id, asset_id, required_status: str, phase: str) -> None:
+        db = SessionLocal()
+        try:
+            run = db.query(PipelineRun).filter_by(id=run_id).first()
+            run_asset = db.query(PipelineRunAsset).filter_by(id=asset_id).first()
+            executor = cls(db)
+            if not run or not run_asset or run_asset.status != required_status:
+                return
+            executor._ensure_running(run)
             try:
-                print(f"{self._phase_label(run.current_phase)} {asset_log_context(run_asset)}")
-                action(run_asset)
-                self.db.commit()
+                print(f"{executor._phase_label(phase)} {asset_log_context(run_asset)}")
+                cls._action_for_phase(executor, phase)(run_asset)
+                db.commit()
             except Exception as error:
-                self.db.rollback()
+                db.rollback()
+                run_asset = db.query(PipelineRunAsset).filter_by(id=asset_id).first()
                 run_asset.status = PipelineAssetStatus.SKIPPED.value
                 run_asset.detail = str(error)
                 run_asset.asset.status = PipelineAssetStatus.FAILED.value
                 run_asset.asset.error_message = str(error)
-                self.db.commit()
+                db.commit()
                 print(f"Perdido {asset_log_context(run_asset)}: {error}")
+        finally:
+            db.close()
 
     @staticmethod
     def _phase_label(phase: str) -> str:
@@ -91,47 +124,58 @@ class PublicPipelineExecutor:
     def _relieve_storage_pressure(self, run: PipelineRun) -> bool:
         """Free only verified PDFs; TXT stays local and RAG remains deferred."""
         cleaned = 0
-        actions = {
-            PipelineAssetStatus.DOWNLOADED.value: self.transformer.optimize,
-            PipelineAssetStatus.OPTIMIZED.value: self.transformer.extract_text,
-            PipelineAssetStatus.TEXT_READY.value: self.classifier.classify,
-            PipelineAssetStatus.CLASSIFIED.value: self.upload_and_verify,
-        }
         # Once pressure begins, keep freeing verified PDFs until the recovery
         # threshold is reached; stopping at 20.01% would pause unnecessarily.
         while not self.space_monitor.recovered():
-            progressed = False
-            for run_asset in self._run_assets(run):
-                self._ensure_running(run)
-                action = actions.get(run_asset.status)
-                if action:
-                    phase = {
-                        PipelineAssetStatus.DOWNLOADED.value: "Optimizando",
-                        PipelineAssetStatus.OPTIMIZED.value: "Extrayendo texto",
-                        PipelineAssetStatus.TEXT_READY.value: "Clasificando",
-                        PipelineAssetStatus.CLASSIFIED.value: "Subiendo a R2",
-                    }[run_asset.status]
-                    print(f"{phase} {asset_log_context(run_asset)} [emergencia de almacenamiento]")
-                    action(run_asset)
-                    self.db.commit()
-                    progressed = True
-                    break
-                if run_asset.status == PipelineAssetStatus.VERIFIED.value and not (run_asset.asset.metadata_json or {}).get("emergency_pdf_cleaned_at"):
-                    print(f"Limpiando PDF local {asset_log_context(run_asset)} [emergencia de almacenamiento]")
-                    self.delete_local_pdfs(run_asset)
-                    run_asset.asset.metadata_json = {
-                        **(run_asset.asset.metadata_json or {}),
-                        "emergency_pdf_cleaned_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                    self.db.commit()
-                    cleaned += 1
-                    progressed = True
-                    break
+            concurrency = max(1, settings.PIPELINE_PROCESS_CONCURRENCY)
+            candidates = [item.id for item in self._run_assets(run) if item.status in {
+                PipelineAssetStatus.DOWNLOADED.value, PipelineAssetStatus.OPTIMIZED.value,
+                PipelineAssetStatus.TEXT_READY.value, PipelineAssetStatus.CLASSIFIED.value,
+                PipelineAssetStatus.VERIFIED.value,
+            }][:concurrency]
+            if not candidates:
+                break
+            with ThreadPoolExecutor(max_workers=len(candidates)) as pool:
+                results = list(pool.map(lambda asset_id: self._relieve_one_asset(run.id, asset_id), candidates))
+            cleaned += sum(results)
+            progressed = any(results) or bool(candidates)
             if not progressed:
                 break
         self._record_storage_pressure(run, not self.space_monitor.recovered(), cleaned)
         self.db.commit()
         return self.space_monitor.recovered()
+
+    @classmethod
+    def _relieve_one_asset(cls, run_id, asset_id) -> int:
+        db = SessionLocal()
+        try:
+            run = db.query(PipelineRun).filter_by(id=run_id).first()
+            run_asset = db.query(PipelineRunAsset).filter_by(id=asset_id).first()
+            executor = cls(db)
+            if not run or not run_asset:
+                return 0
+            executor._ensure_running(run)
+            phases = {
+                PipelineAssetStatus.DOWNLOADED.value: ("Optimizando", executor.transformer.optimize),
+                PipelineAssetStatus.OPTIMIZED.value: ("Extrayendo texto", executor.transformer.extract_text),
+                PipelineAssetStatus.TEXT_READY.value: ("Clasificando", executor.classifier.classify),
+                PipelineAssetStatus.CLASSIFIED.value: ("Subiendo a R2", executor.upload_and_verify),
+            }
+            while run_asset.status in phases:
+                label, action = phases[run_asset.status]
+                print(f"{label} {asset_log_context(run_asset)} [emergencia de almacenamiento]")
+                action(run_asset)
+                db.commit()
+                db.refresh(run_asset)
+            if run_asset.status == PipelineAssetStatus.VERIFIED.value and not (run_asset.asset.metadata_json or {}).get("emergency_pdf_cleaned_at"):
+                print(f"Limpiando PDF local {asset_log_context(run_asset)} [emergencia de almacenamiento]")
+                executor.delete_local_pdfs(run_asset)
+                run_asset.asset.metadata_json = {**(run_asset.asset.metadata_json or {}), "emergency_pdf_cleaned_at": datetime.now(timezone.utc).isoformat()}
+                db.commit()
+                return 1
+            return 0
+        finally:
+            db.close()
 
     def _execute_download_phase(self, run: PipelineRun) -> bool:
         """Download until complete, or pause/relieve when the data pool is low."""

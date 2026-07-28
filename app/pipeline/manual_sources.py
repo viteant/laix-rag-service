@@ -12,6 +12,16 @@ MANUAL_SOURCE_TYPES = ("jurisprudencia", "documentos")
 
 def register_manual_sources(db: Session, run: PipelineRun, root: Path = Path("data/source")) -> int:
     """Attach local PDFs to a batch without renaming or re-uploading known content."""
+    summary = dict(run.summary or {})
+    if summary.get("manual_sources_registration_completed"):
+        return 0
+
+    files_by_type = {
+        source_type: list((root / source_type).rglob("*.pdf")) if (root / source_type).exists() else []
+        for source_type in MANUAL_SOURCE_TYPES
+    }
+    total = sum(len(files) for files in files_by_type.values())
+    processed = 0
     registered = 0
     for source_type in MANUAL_SOURCE_TYPES:
         source = db.query(PipelineSource).filter_by(
@@ -22,8 +32,13 @@ def register_manual_sources(db: Session, run: PipelineRun, root: Path = Path("da
             db.add(source)
             db.flush()
 
-        directory = root / source_type
-        for pdf in directory.rglob("*.pdf") if directory.exists() else ():
+        for pdf in files_by_type[source_type]:
+            processed += 1
+            if processed % 100 == 0:
+                summary["manual_sources_registration"] = {"processed": processed, "total": total, "registered": registered}
+                run.summary = summary
+                db.commit()
+                print(f"Registrando fuentes manuales: {processed} / {total} · nuevos en lote: {registered}")
             digest = sha256_file(pdf)
             asset = db.query(PipelineAsset).filter_by(source_id=source.id, logical_identity=f"manual:{digest}").first()
             if not asset:
@@ -64,5 +79,9 @@ def register_manual_sources(db: Session, run: PipelineRun, root: Path = Path("da
             ))
             registered += 1
 
+    summary["manual_sources_registration"] = {"processed": processed, "total": total, "registered": registered}
+    summary["manual_sources_registration_completed"] = True
+    run.summary = summary
     db.commit()
+    print(f"Registro manual completado: {processed} / {total} · nuevos en lote: {registered}")
     return registered

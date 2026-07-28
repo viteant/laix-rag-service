@@ -105,11 +105,19 @@ class PublicPipelineExecutor:
                 self._ensure_running(run)
                 action = actions.get(run_asset.status)
                 if action:
+                    phase = {
+                        PipelineAssetStatus.DOWNLOADED.value: "Optimizando",
+                        PipelineAssetStatus.OPTIMIZED.value: "Extrayendo texto",
+                        PipelineAssetStatus.TEXT_READY.value: "Clasificando",
+                        PipelineAssetStatus.CLASSIFIED.value: "Subiendo a R2",
+                    }[run_asset.status]
+                    print(f"{phase} {asset_log_context(run_asset)} [emergencia de almacenamiento]")
                     action(run_asset)
                     self.db.commit()
                     progressed = True
                     break
                 if run_asset.status == PipelineAssetStatus.VERIFIED.value and not (run_asset.asset.metadata_json or {}).get("emergency_pdf_cleaned_at"):
+                    print(f"Limpiando PDF local {asset_log_context(run_asset)} [emergencia de almacenamiento]")
                     self.delete_local_pdfs(run_asset)
                     run_asset.asset.metadata_json = {
                         **(run_asset.asset.metadata_json or {}),

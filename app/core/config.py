@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # Emergency disk-space relief for the public-source batch.
     PIPELINE_STORAGE_PATH: str = "/app/data"
     PIPELINE_MIN_FREE_SPACE_PERCENT: float = 20
-    PIPELINE_RESUME_FREE_SPACE_PERCENT: float = 25
+    PIPELINE_RESUME_FREE_SPACE_PERCENT: float = 40
 
     # Cloudflare R2 (S3-compatible API)
     R2_ENDPOINT_URL: str = ""

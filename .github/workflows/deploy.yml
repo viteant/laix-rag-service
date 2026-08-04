@@ -132,12 +132,22 @@ jobs:
               DOCKER_COMPOSE_CMD="docker compose"
             fi
 
-            # 3. Compilar primero para mostrar logs en consola y luego levantar
-            echo "🐳 Compilando imágenes Docker..."
-            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml build
-            
-            echo "🐳 Levantando contenedores..."
-            $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d
+            # 3. Nunca interrumpir un lote activo: el worker puede estar
+            # ejecutando OCR, descarga o RAG parcial durante un despliegue.
+            ACTIVE_PIPELINE=$($SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml exec -T api python -c 'from app.core.database import SessionLocal; from app.pipeline.models import PipelineRun, PipelineRunStatus; db = SessionLocal(); print("1" if db.query(PipelineRun).filter(PipelineRun.status.in_((PipelineRunStatus.PENDING.value, PipelineRunStatus.RUNNING.value, PipelineRunStatus.PAUSED.value))).first() else "0"); db.close()' 2>/dev/null || echo "0")
+
+            if [ "$ACTIVE_PIPELINE" = "1" ]; then
+              echo "🛡️ Lote activo detectado: se conserva el worker sin reiniciarlo."
+              echo "🐳 Compilando únicamente servicios web..."
+              $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml build api dashboard nginx
+              echo "🐳 Actualizando API, dashboard y Nginx..."
+              $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d api dashboard nginx
+            else
+              echo "🐳 Compilando imágenes Docker..."
+              $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml build
+              echo "🐳 Levantando contenedores..."
+              $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d
+            fi
 
             # Evita que capas y cachés de compilaciones antiguas llenen el disco
             # raíz. Solo corre bajo presión y nunca elimina contenedores o volúmenes.
@@ -161,7 +171,7 @@ jobs:
             HEALTH_STATUS=""
             for i in {1..20}; do
               sleep 2
-              HEALTH_STATUS=$(curl -s http://localhost/health | grep -o '"status":"healthy"' || true)
+              HEALTH_STATUS=$(curl -ks --resolve api.viant.online:443:127.0.0.1 https://api.viant.online/health | grep -o '"status":"healthy"' || true)
               if [ "$HEALTH_STATUS" = '"status":"healthy"' ]; then
                 break
               fi

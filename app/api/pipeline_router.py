@@ -8,7 +8,7 @@ from app.pipeline.executor import PublicPipelineExecutor
 from app.pipeline.models import PipelineRun, PipelineRunStatus
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
-from app.tasks.pipeline_tasks import discover_public_sources_task, execute_public_pipeline_task
+from app.tasks.pipeline_tasks import discover_public_sources_task, execute_staged_public_pipeline_task, ingest_verified_pipeline_assets_task
 
 router = APIRouter(prefix="/v1/admin/pipeline", tags=["Pipeline público"])
 
@@ -77,10 +77,19 @@ def resume_run(run_id: str, db: Session = Depends(get_db)):
     PipelineOrchestrator.start(run)
     db.commit()
     notify_pipeline_event(run, "reanudado", "Lote reanudado por un administrador.")
-    if run.current_phase == "download" and not (run.summary or {}).get("discovery_completed"):
-        task = discover_public_sources_task.delay(str(run.id))
-        return {**_serialize(run), "task_id": task.id}
-    task = execute_public_pipeline_task.delay(str(run.id))
+    task = execute_staged_public_pipeline_task.delay(str(run.id))
+    return {**_serialize(run), "task_id": task.id}
+
+
+@router.post("/runs/{run_id}/ingest-verified", dependencies=[Depends(get_current_system)])
+def ingest_verified(run_id: str, db: Session = Depends(get_db)):
+    run = _run_or_404(db, run_id)
+    if run.status != PipelineRunStatus.PAUSED.value:
+        raise HTTPException(status_code=409, detail="Pause the pipeline before starting partial RAG")
+    partial = (run.summary or {}).get("partial_rag", {})
+    if partial.get("status") == "running":
+        raise HTTPException(status_code=409, detail="A partial RAG task is already running")
+    task = ingest_verified_pipeline_assets_task.delay(str(run.id))
     return {**_serialize(run), "task_id": task.id}
 
 

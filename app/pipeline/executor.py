@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
 from sqlalchemy.orm import Session
@@ -291,6 +291,84 @@ class PublicPipelineExecutor:
                     last_heartbeat = time.monotonic()
                 time.sleep(0.5)
             self._record_runtime_metrics(run)
+
+    def ingest_verified_assets_while_paused(self, run: PipelineRun) -> dict:
+        """Index only durable TXT files without resuming the download pipeline."""
+        self.db.refresh(run)
+        if run.status != PipelineRunStatus.PAUSED.value:
+            raise BatchExecutionError("Partial RAG requires a paused pipeline")
+        asset_ids = [item.id for item in self._run_assets(run) if item.status == PipelineAssetStatus.VERIFIED.value]
+        started_at = datetime.now(timezone.utc)
+        summary = dict(run.summary or {})
+        summary["partial_rag"] = {
+            "status": "running", "total": len(asset_ids), "processed": 0,
+            "failed": 0, "started_at": started_at.isoformat(),
+        }
+        run.summary = summary
+        self.db.commit()
+
+        succeeded = failed = 0
+        workers = min(max(1, settings.PIPELINE_PROCESS_CONCURRENCY), len(asset_ids) or 1)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(self._ingest_verified_asset_while_paused, run.id, asset_id) for asset_id in asset_ids]
+            for future in as_completed(futures):
+                if future.result():
+                    succeeded += 1
+                else:
+                    failed += 1
+                self.db.refresh(run)
+                summary = dict(run.summary or {})
+                partial = dict(summary.get("partial_rag", {}))
+                processed = succeeded + failed
+                elapsed_seconds = max((datetime.now(timezone.utc) - started_at).total_seconds(), 1)
+                rate_per_hour = processed * 3600 / elapsed_seconds
+                partial.update({
+                    "processed": processed, "failed": failed,
+                    "rate_documents_per_hour": round(rate_per_hour, 1),
+                    "estimated_remaining_seconds": round((len(asset_ids) - processed) / rate_per_hour * 3600) if processed else None,
+                })
+                summary["partial_rag"] = partial
+                run.summary = summary
+                self.db.commit()
+
+        self.db.refresh(run)
+        summary = dict(run.summary or {})
+        partial = dict(summary.get("partial_rag", {}))
+        partial.update({
+            "status": "completed" if run.status == PipelineRunStatus.PAUSED.value else "interrupted",
+            "processed": succeeded + failed, "failed": failed,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        summary["partial_rag"] = partial
+        run.summary = summary
+        self.db.commit()
+        return partial
+
+    @classmethod
+    def _ingest_verified_asset_while_paused(cls, run_id, asset_id) -> bool:
+        db = SessionLocal()
+        try:
+            run = db.query(PipelineRun).filter_by(id=run_id).first()
+            run_asset = db.query(PipelineRunAsset).filter_by(id=asset_id).first()
+            if not run or not run_asset or run.status != PipelineRunStatus.PAUSED.value or run_asset.status != PipelineAssetStatus.VERIFIED.value:
+                return False
+            print(f"Cargando RAG parcial {asset_log_context(run_asset)}")
+            RagTxtLoader(db).load(run_asset)
+            db.commit()
+            return True
+        except Exception as error:
+            db.rollback()
+            run_asset = db.query(PipelineRunAsset).filter_by(id=asset_id).first()
+            if run_asset:
+                run_asset.status = PipelineAssetStatus.SKIPPED.value
+                run_asset.detail = str(error)
+                run_asset.asset.status = PipelineAssetStatus.FAILED.value
+                run_asset.asset.error_message = str(error)
+                db.commit()
+                print(f"Perdido RAG parcial {asset_log_context(run_asset)}: {error}")
+            return False
+        finally:
+            db.close()
 
     @classmethod
     def _process_scope_asset(cls, run_id, asset_id) -> None:

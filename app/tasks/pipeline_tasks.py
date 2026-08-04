@@ -17,6 +17,42 @@ def process_scope_asset_task(run_id: str, asset_id: str) -> dict:
     return {"run_id": run_id, "asset_id": asset_id}
 
 
+@celery_app.task(name="app.tasks.pipeline_tasks.ingest_verified_pipeline_assets_task")
+def ingest_verified_pipeline_assets_task(run_id: str) -> dict:
+    """Run partial RAG while download work is administratively paused."""
+    db = SessionLocal()
+    locked = False
+    try:
+        locked = bool(db.execute(text("SELECT pg_try_advisory_lock(hashtext(:key))"), {"key": f"partial-rag:{run_id}"}).scalar())
+        if not locked:
+            return {"status": "already_running", "run_id": run_id}
+        run = db.query(PipelineRun).filter_by(id=run_id).first()
+        if not run:
+            return {"status": "error", "message": "Pipeline run not found"}
+        if run.status != PipelineRunStatus.PAUSED.value:
+            return {"status": run.status, "message": "Partial RAG requires a paused pipeline", "run_id": run_id}
+        notify_pipeline_event(run, "RAG parcial iniciado", "Se indexarán únicamente los activos verificados hasta este momento.")
+        result = PublicPipelineExecutor(db).ingest_verified_assets_while_paused(run)
+        notify_pipeline_event(run, "RAG parcial completado", f"Procesados: {result['processed']} · fallidos: {result['failed']}")
+        return {"status": result["status"], "run_id": run_id, **result}
+    except Exception as error:
+        db.rollback()
+        run = db.query(PipelineRun).filter_by(id=run_id).first()
+        if run:
+            summary = dict(run.summary or {})
+            partial = dict(summary.get("partial_rag", {}))
+            partial.update({"status": "failed", "error": str(error)})
+            summary["partial_rag"] = partial
+            run.summary = summary
+            db.commit()
+            notify_pipeline_event(run, "RAG parcial fallido", str(error))
+        raise
+    finally:
+        if locked:
+            db.execute(text("SELECT pg_advisory_unlock(hashtext(:key))"), {"key": f"partial-rag:{run_id}"})
+        db.close()
+
+
 @celery_app.task(name="app.tasks.pipeline_tasks.discover_public_sources_task")
 def discover_public_sources_task(run_id: str) -> dict:
     """Persistently discover public assets and honor administrator controls."""

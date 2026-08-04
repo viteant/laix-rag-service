@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.pipeline.models import PipelineRun
 from app.pipeline.notifier import notify_pipeline_event
 from app.pipeline.orchestrator import PipelineOrchestrator
-from app.tasks.pipeline_tasks import execute_staged_public_pipeline_task
+from app.tasks.pipeline_tasks import execute_staged_public_pipeline_task, ingest_verified_pipeline_assets_task
 
 load_dotenv()
 
@@ -196,6 +196,16 @@ with rag_tab:
         st.plotly_chart(px.pie(status_df, values="count", names="status", color="status"), use_container_width=True)
     else:
         st.info("El RAG se ejecutará cuando todos los TXT del lote estén listos.")
+    partial_rag = (pipeline_run or {}).get("summary", {}).get("partial_rag", {})
+    if partial_rag:
+        total = int(partial_rag.get("total", 0))
+        processed = int(partial_rag.get("processed", 0))
+        st.progress(processed / total if total else 0, text=f"RAG parcial: {processed} / {total} · estado {partial_rag.get('status', 'desconocido')} · fallidos: {partial_rag.get('failed', 0)}")
+        rate = partial_rag.get("rate_documents_per_hour")
+        remaining_seconds = partial_rag.get("estimated_remaining_seconds")
+        if rate:
+            estimate = f"{remaining_seconds / 3600:.1f} h restantes" if remaining_seconds is not None else "calculando tiempo restante"
+            st.caption(f"Velocidad observada: {rate:.1f} documentos/hora · {estimate}")
 
 with resources_tab:
     st.subheader("Recursos del worker")
@@ -248,6 +258,7 @@ with pipeline_tab:
             st.caption(f"Lote activo: {active['id']} · fase {active['fase']}")
             action_col, reason_col = st.columns([1, 2])
             reason = reason_col.text_input("Motivo de cancelación", key="pipeline_cancel_reason")
+            partial_rag = (pipeline_run or {}).get("summary", {}).get("partial_rag", {})
             db = SessionLocal()
             try:
                 run = db.query(PipelineRun).filter_by(id=active["id"]).first()
@@ -264,6 +275,14 @@ with pipeline_tab:
                     execute_staged_public_pipeline_task.delay(str(run.id))
                     st.cache_data.clear()
                     st.rerun()
+                if action_col.button(
+                    "Procesar RAG verificados",
+                    disabled=active["estado"] != "paused" or partial_rag.get("status") == "running",
+                    help="Requiere pausar el lote. Procesa solo TXT con PDF ya verificado en R2.",
+                ):
+                    task = ingest_verified_pipeline_assets_task.delay(str(run.id))
+                    st.info(f"RAG parcial iniciado en segundo plano: {task.id}")
+                    st.cache_data.clear()
                 if action_col.button("Cancelar lote", disabled=not reason):
                     PipelineOrchestrator.cancel(run, reason)
                     db.commit()

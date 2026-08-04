@@ -26,6 +26,10 @@ class JurisprudenceAnswerGenerator:
                 "sources_used": []
             }
 
+        # HybridSearch entrega los resultados en orden de relevancia. La
+        # respuesta sintetizada toma el primero como fuente principal.
+        top_chunk = chunks[0]
+
         # 2. Formatear fuentes y citas estructuradas
         citations = []
         context_blocks = []

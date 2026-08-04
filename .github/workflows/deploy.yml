@@ -132,6 +132,16 @@ jobs:
               DOCKER_COMPOSE_CMD="docker compose"
             fi
 
+            # Docker must not reuse a stale dependency layer when pyproject.toml
+            # changes. In particular, passlib 1.7.x requires bcrypt < 5.
+            build_web_services() {
+              $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml build api dashboard nginx
+              if ! $SUDO docker run --rm laix-rag-api python -c 'import importlib.metadata as m; assert int(m.version("bcrypt").split(".", 1)[0]) < 5' >/dev/null; then
+                echo "♻️ Imagen API con bcrypt incompatible; reconstruyendo servicios web sin caché..."
+                $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml build --no-cache api dashboard nginx
+              fi
+            }
+
             # 3. Nunca interrumpir un lote activo: el worker puede estar
             # ejecutando OCR, descarga o RAG parcial durante un despliegue.
             ACTIVE_PIPELINE=$($SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml exec -T api python -c 'from app.core.database import SessionLocal; from app.pipeline.models import PipelineRun, PipelineRunStatus; db = SessionLocal(); print("1" if db.query(PipelineRun).filter(PipelineRun.status.in_((PipelineRunStatus.PENDING.value, PipelineRunStatus.RUNNING.value, PipelineRunStatus.PAUSED.value))).first() else "0"); db.close()' 2>/dev/null || echo "0")
@@ -139,12 +149,16 @@ jobs:
             if [ "$ACTIVE_PIPELINE" = "1" ]; then
               echo "🛡️ Lote activo detectado: se conserva el worker sin reiniciarlo."
               echo "🐳 Compilando únicamente servicios web..."
-              $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml build api dashboard nginx
+              build_web_services
               echo "🐳 Actualizando API, dashboard y Nginx..."
               $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d api dashboard nginx
             else
               echo "🐳 Compilando imágenes Docker..."
               $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml build
+              if ! $SUDO docker run --rm laix-rag-api python -c 'import importlib.metadata as m; assert int(m.version("bcrypt").split(".", 1)[0]) < 5' >/dev/null; then
+                echo "♻️ Imagen API con bcrypt incompatible; reconstruyendo sin caché..."
+                $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml build --no-cache
+              fi
               echo "🐳 Levantando contenedores..."
               $SUDO $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d
             fi

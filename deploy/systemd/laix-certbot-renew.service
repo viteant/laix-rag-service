@@ -1,0 +1,9 @@
+[Unit]
+Description=Renew Let's Encrypt certificates for LAIX RAG
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker run --rm -v /etc/laix-rag/letsencrypt:/etc/letsencrypt -v /etc/laix-rag/certbot-webroot:/var/www/certbot certbot/certbot renew --quiet
+ExecStartPost=/usr/bin/docker exec laix_rag_nginx nginx -s reload

@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily check for LAIX RAG certificate renewal
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

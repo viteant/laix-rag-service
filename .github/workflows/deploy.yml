@@ -114,8 +114,11 @@ jobs:
               SUDO="sudo"
             fi
             $SUDO install -D -m 644 deploy/systemd/laix-public-pipeline.service /etc/systemd/system/laix-public-pipeline.service
+            $SUDO install -D -m 644 deploy/systemd/laix-certbot-renew.service /etc/systemd/system/laix-certbot-renew.service
+            $SUDO install -D -m 644 deploy/systemd/laix-certbot-renew.timer /etc/systemd/system/laix-certbot-renew.timer
             $SUDO systemctl daemon-reload
             $SUDO systemctl enable laix-public-pipeline.service
+            $SUDO systemctl enable --now laix-certbot-renew.timer
 
             # 2. Determinar comando docker compose y permisos
             SUDO=""

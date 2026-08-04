@@ -1,5 +1,11 @@
 # Laix RAG Service
 
+## API de consulta
+
+La guía operativa, autenticación y ejemplos de prueba están en
+[docs/api.md](docs/api.md). En producción, la documentación interactiva está
+en `https://api.viant.online/docs`.
+
 ## About the Project
 The **Laix RAG Service** is an AI-powered document retrieval and analysis system utilizing Retrieval-Augmented Generation (RAG). It is specifically designed to handle and process large volumes of jurisprudence and legal documents.
 

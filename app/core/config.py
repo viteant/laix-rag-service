@@ -60,13 +60,27 @@ class Settings(BaseSettings):
     PIPELINE_PROCESS_CONCURRENCY: int = 4
     PIPELINE_OCR_CONCURRENCY: int = 4
 
-    # Cloudflare R2 (S3-compatible API)
+    # Cloudflare R2 (S3-compatible API) — public scraping pipeline's bucket.
     R2_ENDPOINT_URL: str = ""
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = ""
     R2_REGION: str = "auto"
     R2_PREFIX: str = "public"
+
+    # Separate bucket/credentials for privately-ingested case documents
+    # (app.storage.private_document_storage). Deliberately not shared with
+    # the public pipeline's R2_* settings above: the private R2 API token
+    # may be scoped to only this bucket, and even if it weren't, pointing
+    # both pipelines at the same bucket/credentials risks one accidentally
+    # redirecting the other. Falls back to the public credentials/region
+    # only when a given private setting is left unset, so existing single-
+    # bucket deployments keep working unchanged.
+    R2_PRIVATE_ENDPOINT_URL: str = ""
+    R2_PRIVATE_ACCESS_KEY_ID: str = ""
+    R2_PRIVATE_SECRET_ACCESS_KEY: str = ""
+    R2_PRIVATE_BUCKET_NAME: str = ""
+    R2_PRIVATE_REGION: str = ""
     R2_PRIVATE_PREFIX: str = "private"
     PUBLIC_PIPELINE_SCHEDULER_ENABLED: bool = False
     PUBLIC_PIPELINE_INTERVAL_DAYS: int = 5

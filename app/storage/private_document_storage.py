@@ -1,12 +1,12 @@
 """Download/delete helper for privately-ingested case documents stored in R2.
 
-Reuses the same R2 account/credentials as the public pipeline
-(app.pipeline.r2_storage) but a distinct key prefix
-(settings.R2_PRIVATE_PREFIX) so private client documents are namespaced
-separately from the publicly-scraped jurisprudence corpus. Both live in the
-same bucket today; moving private documents to a dedicated bucket later
-(for stricter IAM-level isolation) only requires changing R2_BUCKET_NAME
-here without touching callers.
+Uses its own bucket/credentials (settings.R2_PRIVATE_*), separate from the
+public pipeline's R2_* settings (app.pipeline.r2_storage) — the private R2
+API token may be scoped to only this bucket, and even where it wouldn't be,
+pointing both pipelines at the same bucket/credentials risks one
+accidentally redirecting the other. Any R2_PRIVATE_* setting left unset
+falls back to the matching public R2_* one, so a single-bucket setup with
+only the public credentials configured keeps working unchanged.
 """
 import tempfile
 from pathlib import Path
@@ -23,13 +23,13 @@ class PrivateDocumentNotFoundError(Exception):
 
 class PrivateDocumentStorage:
     def __init__(self, client=None):
-        self.bucket = settings.R2_BUCKET_NAME
+        self.bucket = settings.R2_PRIVATE_BUCKET_NAME or settings.R2_BUCKET_NAME
         self.client = client or boto3.client(
             "s3",
-            endpoint_url=settings.R2_ENDPOINT_URL,
-            aws_access_key_id=settings.R2_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
-            region_name=settings.R2_REGION,
+            endpoint_url=settings.R2_PRIVATE_ENDPOINT_URL or settings.R2_ENDPOINT_URL,
+            aws_access_key_id=settings.R2_PRIVATE_ACCESS_KEY_ID or settings.R2_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.R2_PRIVATE_SECRET_ACCESS_KEY or settings.R2_SECRET_ACCESS_KEY,
+            region_name=settings.R2_PRIVATE_REGION or settings.R2_REGION,
         )
 
     def download_to_temp(self, r2_key: str) -> Path:

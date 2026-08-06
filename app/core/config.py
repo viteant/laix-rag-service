@@ -41,6 +41,16 @@ class Settings(BaseSettings):
     LLM_CLASSIFIER_MAX_INPUT_CHARS: int = 18000
     LLM_CLASSIFIER_PROMPT_VERSION: str = "registro-oficial-v1"
 
+    # LLM answer generation for /v1/jurisprudence/answer (RAG = grounding, LLM = wording)
+    LLM_ANSWER_ENABLED: bool = False
+    LLM_ANSWER_PROVIDER: str = "openai_compatible"
+    LLM_ANSWER_MODEL: str = ""
+    LLM_ANSWER_API_KEY: str = ""
+    LLM_ANSWER_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_ANSWER_TIMEOUT_SECONDS: int = 45
+    LLM_ANSWER_TEMPERATURE: float = 0.2
+    LLM_ANSWER_MAX_CONTEXT_CHARS: int = 12000
+
     # Emergency disk-space relief for the public-source batch.
     PIPELINE_STORAGE_PATH: str = "/app/data"
     PIPELINE_MIN_FREE_SPACE_PERCENT: float = 20
@@ -57,6 +67,7 @@ class Settings(BaseSettings):
     R2_BUCKET_NAME: str = ""
     R2_REGION: str = "auto"
     R2_PREFIX: str = "public"
+    R2_PRIVATE_PREFIX: str = "private"
     PUBLIC_PIPELINE_SCHEDULER_ENABLED: bool = False
     PUBLIC_PIPELINE_INTERVAL_DAYS: int = 5
 

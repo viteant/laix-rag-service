@@ -61,6 +61,20 @@ class VectorSearch:
                 sql += " AND COALESCE(c.metadata->'registro_oficial_categories', '[]'::jsonb) ? :registro_oficial_category"
                 params["registro_oficial_category"] = filters["registro_oficial_category"]
 
+        # Privately-ingested case documents (tagged with tenant_id/matter_id at
+        # ingestion, see app.api.private_router.tag_documents_with_scope) must
+        # never leak into general jurisprudence search. Only surface them when
+        # the caller explicitly scopes the query to that exact tenant/matter;
+        # otherwise exclude anything tagged as private, regardless of tenant.
+        if filters and filters.get("tenant_id"):
+            sql += " AND c.metadata->>'tenant_id' = :tenant_id"
+            params["tenant_id"] = filters["tenant_id"]
+            if filters.get("matter_id"):
+                sql += " AND c.metadata->>'matter_id' = :matter_id"
+                params["matter_id"] = filters["matter_id"]
+        else:
+            sql += " AND c.metadata->>'tenant_id' IS NULL"
+
         sql += " ORDER BY c.embedding <=> CAST(:query_vector AS vector) ASC LIMIT :limit;"
 
         result = self.db.execute(text(sql), params)

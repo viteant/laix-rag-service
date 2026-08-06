@@ -10,6 +10,7 @@ from app.pipeline import models as pipeline_models
 from app.api.jurisprudence_router import router as jurisprudence_router
 from app.api.admin_router import router as admin_router
 from app.api.pipeline_router import router as pipeline_router
+from app.api.private_router import router as private_router
 
 # Intentar conectar a PostgreSQL con reintentos durante el arranque inicial
 max_retries = 10
@@ -54,6 +55,7 @@ app.include_router(auth_router)
 app.include_router(jurisprudence_router)
 app.include_router(admin_router)
 app.include_router(pipeline_router)
+app.include_router(private_router)
 
 
 @app.get("/health")

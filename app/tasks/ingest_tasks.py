@@ -14,16 +14,16 @@ def ingest_source_document_task(document_id: str):
             print(f"❌ SourceDocument with ID {document_id} not found in worker.")
             return {"status": "error", "message": "Document not found"}
 
-        filepath = pathlib.Path(doc.filepath)
+        filepath = pathlib.Path(doc.original_path)
         if not filepath.exists():
-            print(f"❌ File not found at path: {doc.filepath}")
+            print(f"❌ File not found at path: {doc.original_path}")
             doc.status = "failed"
-            doc.error_message = f"File not found: {doc.filepath}"
+            doc.error_message = f"File not found: {doc.original_path}"
             db.commit()
             return {"status": "error", "message": "File not found"}
 
-        success = process_single_pdf(db, filepath, force=True)
-        return {"status": "completed" if success else "failed", "document_id": document_id}
+        result = process_single_pdf(db, filepath, force=True)
+        return {"status": result, "document_id": document_id}
 
     finally:
         db.close()
